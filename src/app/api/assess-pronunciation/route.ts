@@ -10,6 +10,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Azure Speech not configured' }, { status: 503 })
   }
 
+  console.log('[assess] key length:', key.trim().length, 'region:', region.trim())
+
   const referenceText = req.nextUrl.searchParams.get('text') ?? ''
   const audioBuffer = await req.arrayBuffer()
 
@@ -38,9 +40,9 @@ export async function POST(req: NextRequest) {
   const text = await azureRes.text()
 
   if (!azureRes.ok) {
-    console.error('[assess-pronunciation] Azure error:', azureRes.status, text)
+    console.error('[assess-pronunciation] Azure error:', azureRes.status, text.slice(0, 300))
     return NextResponse.json(
-      { error: `Azure error ${azureRes.status}` },
+      { error: `Azure error ${azureRes.status}: ${text.slice(0, 200)}` },
       { status: azureRes.status }
     )
   }
