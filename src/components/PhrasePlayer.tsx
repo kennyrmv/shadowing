@@ -24,7 +24,7 @@ import PhraseRecorder from './PhraseRecorder'
 import PronunciationAssessor from './PronunciationAssessor'
 import { Phrase, LoopState, SRSRating } from '@/types'
 import { scorePhrases } from '@/lib/scorePhrases'
-import { addToQueue, ratePhrase, isQueued } from '@/lib/srs'
+import { addToQueue, ratePhrase, isQueued, exportData } from '@/lib/srs'
 import { recordPhraseSession } from '@/lib/progress'
 
 interface Props {
@@ -397,7 +397,6 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
           </p>
           <button
             onClick={() => {
-              const { exportData } = require('@/lib/srs')
               const json = exportData()
               const a = document.createElement('a')
               a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
