@@ -13,10 +13,9 @@ def make_api():
     """Build YouTubeTranscriptApi with proxy (server) or browser cookies (local)."""
     from youtube_transcript_api import YouTubeTranscriptApi
 
-    # Server: use Webshare proxy via the library's native ProxyConfig
-    proxy_user = os.environ.get('WEBSHARE_PROXY_USER')
-    proxy_pass = os.environ.get('WEBSHARE_PROXY_PASS')
-    print(f"[DEBUG] WEBSHARE_PROXY_USER={'SET' if proxy_user else 'NOT SET'}", file=sys.stderr)
+    # Server: use Webshare proxy — try argv first (passed by Node.js), then env var
+    proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('WEBSHARE_PROXY_USER')
+    proxy_pass = (sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None) or os.environ.get('WEBSHARE_PROXY_PASS')
     if proxy_user and proxy_pass:
         try:
             from youtube_transcript_api.proxies import WebshareProxyConfig

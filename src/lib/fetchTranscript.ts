@@ -51,10 +51,12 @@ export async function fetchTranscript(videoId: string): Promise<RawCaption[]> {
 
   let stdout: string
   try {
+    const proxyUser = process.env.WEBSHARE_PROXY_USER ?? ''
+    const proxyPass = process.env.WEBSHARE_PROXY_PASS ?? ''
     const result = await execFileAsync(
       cachedPython,
-      [SCRIPT_PATH, videoId],
-      { timeout: 20000, env: { ...process.env } }  // explicitly pass env so YOUTUBE_PROXY reaches Python
+      [SCRIPT_PATH, videoId, proxyUser, proxyPass],
+      { timeout: 20000, env: { ...process.env } }
     )
     stdout = result.stdout
   } catch (err: unknown) {
