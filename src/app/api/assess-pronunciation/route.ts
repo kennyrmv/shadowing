@@ -53,9 +53,10 @@ export async function POST(req: NextRequest) {
   })
 
   const text = await azureRes.text()
+  console.log('[assess] Azure response status:', azureRes.status)
+  console.log('[assess] Azure response body:', text.slice(0, 500))
 
   if (!azureRes.ok) {
-    console.error('[assess-pronunciation] Azure error:', azureRes.status, text.slice(0, 300))
     return NextResponse.json(
       { error: `Azure error ${azureRes.status}: ${text.slice(0, 200)}` },
       { status: azureRes.status }
