@@ -16,16 +16,19 @@ def make_api():
     # Server: use Webshare proxy via the library's native ProxyConfig
     proxy_user = os.environ.get('WEBSHARE_PROXY_USER')
     proxy_pass = os.environ.get('WEBSHARE_PROXY_PASS')
+    print(f"[DEBUG] WEBSHARE_PROXY_USER={'SET' if proxy_user else 'NOT SET'}", file=sys.stderr)
     if proxy_user and proxy_pass:
         try:
             from youtube_transcript_api.proxies import WebshareProxyConfig
+            print(f"[DEBUG] Using WebshareProxyConfig with user={proxy_user}", file=sys.stderr)
             return YouTubeTranscriptApi(
                 proxy_config=WebshareProxyConfig(
                     proxy_username=proxy_user,
                     proxy_password=proxy_pass,
                 )
             )
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] WebshareProxyConfig failed: {e}", file=sys.stderr)
             pass  # fall through to browser cookies
 
     # Local dev: use browser cookies via requests session
