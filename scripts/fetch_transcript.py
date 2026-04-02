@@ -100,7 +100,8 @@ def main():
         print(json.dumps({"error": "NO_CAPTIONS"}))
         sys.exit(1)
     except Exception as e:
-        print(json.dumps({"error": str(e)}))
+        proxy_user = os.environ.get('WEBSHARE_PROXY_USER', 'NOT_SET')
+        print(json.dumps({"error": f"[proxy_user={proxy_user}] {str(e)}"}))
         sys.exit(1)
 
 if __name__ == "__main__":
