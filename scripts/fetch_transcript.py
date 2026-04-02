@@ -8,35 +8,46 @@ import sys
 import json
 import os
 
-def make_session():
-    """Build a requests.Session with browser cookies (local) or proxy (server)."""
-    import requests
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-    })
 
-    # On server: use proxy from env var (format: http://user:pass@host:port)
-    proxy_url = os.environ.get('YOUTUBE_PROXY')
-    if proxy_url:
-        session.proxies = {'http': proxy_url, 'https': proxy_url}
-        return session
+def make_api():
+    """Build YouTubeTranscriptApi with proxy (server) or browser cookies (local)."""
+    from youtube_transcript_api import YouTubeTranscriptApi
 
-    # Local dev: use browser cookies
+    # Server: use Webshare proxy via the library's native ProxyConfig
+    proxy_user = os.environ.get('WEBSHARE_PROXY_USER')
+    proxy_pass = os.environ.get('WEBSHARE_PROXY_PASS')
+    if proxy_user and proxy_pass:
+        try:
+            from youtube_transcript_api.proxies import WebshareProxyConfig
+            return YouTubeTranscriptApi(
+                proxy_config=WebshareProxyConfig(
+                    proxy_username=proxy_user,
+                    proxy_password=proxy_pass,
+                )
+            )
+        except Exception:
+            pass  # fall through to browser cookies
+
+    # Local dev: use browser cookies via requests session
     try:
+        import requests
         import browser_cookie3
+        session = requests.Session()
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        })
         for loader in [browser_cookie3.chrome, browser_cookie3.safari, browser_cookie3.firefox]:
             try:
                 jar = loader(domain_name='.youtube.com')
                 session.cookies = jar
-                return session
+                return YouTubeTranscriptApi(http_client=session)
             except Exception:
                 continue
     except ImportError:
         pass
 
-    return session
+    return YouTubeTranscriptApi()
 
 
 def main():
@@ -53,8 +64,7 @@ def main():
         sys.exit(1)
 
     try:
-        session = make_session()
-        api = YouTubeTranscriptApi(http_client=session) if session else YouTubeTranscriptApi()
+        api = make_api()
         transcript_list = api.list(video_id)
 
         # Prefer English, fall back to first available
