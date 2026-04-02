@@ -6,14 +6,8 @@
 // speech against the active phrase text.
 //
 // Flow:
-//   [Assess] → mic opens → user speaks → Azure scores → results shown
-//
-// Scoring (per word):
-//   AccuracyScore >= 80 → green (good)
-//   AccuracyScore >= 50 → yellow (needs work)
-//   AccuracyScore <  50 → red (incorrect)
-//   ErrorType "Omission" → gray strikethrough (skipped)
-//   ErrorType "Insertion" → shown in brackets
+//   [Assess] → 1s countdown (mic warms up) → "Speak now" → user speaks →
+//   Azure auto-detects end of speech → scores shown
 
 import { useState, useCallback } from 'react'
 
@@ -31,12 +25,12 @@ interface AssessmentResult {
   words: WordResult[]
 }
 
-type Status = 'idle' | 'listening' | 'processing' | 'done' | 'error'
+type Status = 'idle' | 'countdown' | 'listening' | 'processing' | 'done' | 'error'
 
 interface Props {
   phraseText: string
-  onAssessStart?: () => void   // so PhrasePlayer can pause the loop
-  onAssessDone?: () => void    // so PhrasePlayer can resume
+  onAssessStart?: () => void
+  onAssessDone?: () => void
 }
 
 function scoreColor(score: number): string {
@@ -53,11 +47,12 @@ function scoreBg(score: number): string {
 
 export default function PronunciationAssessor({ phraseText, onAssessStart, onAssessDone }: Props) {
   const [status, setStatus] = useState<Status>('idle')
+  const [countdown, setCountdown] = useState(3)
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
 
   const runAssessment = useCallback(async () => {
-    // Fetch config from server at runtime — key is never embedded in client bundle
+    // Fetch Azure config from server
     let key: string, region: string
     try {
       const res = await fetch('/api/speech-config')
@@ -66,17 +61,24 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
       key = config.key
       region = config.region
     } catch {
-      setErrorMsg('Azure Speech not configured. Add NEXT_PUBLIC_AZURE_SPEECH_KEY to Railway variables.')
+      setErrorMsg('Azure Speech not configured.')
       setStatus('error')
       return
     }
 
-    setStatus('listening')
+    setStatus('countdown')
     setResult(null)
     onAssessStart?.()
 
+    // Countdown 3-2-1 so mic has time to initialize and user gets ready
+    for (let i = 3; i >= 1; i--) {
+      setCountdown(i)
+      await new Promise((r) => setTimeout(r, 700))
+    }
+
+    setStatus('listening')
+
     try {
-      // Lazy-load the SDK — it's large (~7MB), only load when needed
       const sdk = await import('microsoft-cognitiveservices-speech-sdk')
 
       const speechConfig = sdk.SpeechConfig.fromSubscription(key, region)
@@ -86,7 +88,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
         phraseText,
         sdk.PronunciationAssessmentGradingSystem.HundredMark,
         sdk.PronunciationAssessmentGranularity.Word,
-        true  // enable miscue (detects omissions and insertions)
+        true
       )
 
       const audioConfig = sdk.AudioConfig.fromDefaultMicrophoneInput()
@@ -100,7 +102,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
             setStatus('processing')
 
             if (sdkResult.reason === sdk.ResultReason.NoMatch || !sdkResult.text) {
-              setErrorMsg('Could not understand speech. Speak clearly and try again.')
+              setErrorMsg('Could not understand. Speak louder and closer to the mic.')
               setStatus('error')
               onAssessDone?.()
               resolve()
@@ -108,10 +110,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
             }
 
             try {
-              // Overall scores via SDK helper
               const assessment = sdk.PronunciationAssessmentResult.fromResult(sdkResult)
-
-              // Word-level scores from the raw JSON response
               const jsonStr = sdkResult.properties.getProperty(
                 sdk.PropertyId.SpeechServiceResponse_JsonResult
               )
@@ -135,7 +134,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
                 words,
               })
               setStatus('done')
-            } catch (parseErr) {
+            } catch {
               setErrorMsg('Could not parse assessment result.')
               setStatus('error')
             }
@@ -153,7 +152,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
         )
       })
     } catch (err) {
-      setErrorMsg(`Could not start assessment: ${err instanceof Error ? err.message : err}`)
+      setErrorMsg(`Could not start: ${err instanceof Error ? err.message : err}`)
       setStatus('error')
       onAssessDone?.()
     }
@@ -161,7 +160,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
 
   return (
     <div className="space-y-3">
-      {/* ── Trigger button ── */}
+      {/* Trigger / retry button */}
       {(status === 'idle' || status === 'error' || status === 'done') && (
         <button
           onClick={runAssessment}
@@ -172,37 +171,43 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
         </button>
       )}
 
-      {/* ── Listening state ── */}
+      {/* Countdown */}
+      {status === 'countdown' && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <span className="text-2xl font-bold text-purple-600 w-8 text-center">{countdown}</span>
+          <span className="text-sm text-purple-700">Get ready to speak the phrase...</span>
+        </div>
+      )}
+
+      {/* Listening */}
       {status === 'listening' && (
         <div className="flex items-center gap-3 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
           <span className="relative flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-600" />
           </span>
-          <span className="text-sm text-purple-700 font-medium">Listening... speak the phrase</span>
+          <span className="text-sm text-purple-700 font-medium">Listening — speak now!</span>
         </div>
       )}
 
-      {/* ── Processing ── */}
+      {/* Processing */}
       {status === 'processing' && (
         <div className="text-sm text-gray-400 px-1">Analyzing...</div>
       )}
 
-      {/* ── Error ── */}
+      {/* Error */}
       {status === 'error' && (
         <p className="text-xs text-red-500 px-1">{errorMsg}</p>
       )}
 
-      {/* ── Results ── */}
+      {/* Results */}
       {status === 'done' && result && (
         <div className="space-y-3">
-          {/* Overall score */}
           <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${scoreBg(result.pronunciationScore)}`}>
             <span className="text-sm font-medium">Pronunciation score</span>
             <span className="text-2xl font-bold">{result.pronunciationScore}</span>
           </div>
 
-          {/* Word-by-word */}
           <div className="bg-gray-50 rounded-lg px-4 py-3">
             <p className="text-xs text-gray-400 mb-2">Word accuracy</p>
             <div className="flex flex-wrap gap-1.5">
@@ -226,7 +231,6 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
             </div>
           </div>
 
-          {/* Sub-scores */}
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
               { label: 'Accuracy', value: result.accuracyScore },
