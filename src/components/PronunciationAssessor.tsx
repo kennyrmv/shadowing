@@ -61,18 +61,28 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
     onAssessStart?.()
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      })
       streamRef.current = stream
       chunksRef.current = []
 
-      const mr = new MediaRecorder(stream)
+      // Pick best supported format for Azure
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', '']
+        .find(t => !t || MediaRecorder.isTypeSupported(t)) ?? ''
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       mediaRecorderRef.current = mr
 
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
 
-      mr.start(100) // collect chunks every 100ms
+      mr.start(250) // collect chunks every 250ms
 
       // Show recording duration
       timerRef.current = setInterval(() => setRecordingSec((s) => s + 1), 1000)
@@ -94,11 +104,11 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
     // Stop recording and collect audio
     const audioBlob = await new Promise<Blob>((resolve) => {
       mr.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop())
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' })
         resolve(blob)
       }
       mr.stop()
-      streamRef.current?.getTracks().forEach((t) => t.stop())
     })
 
     // Send audio to our server — it proxies to Azure (key stays server-side)
@@ -125,15 +135,18 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
       }
 
       const best = json.NBest[0]
-      const pa = best.PronunciationAssessment
+      // Azure puts scores directly on NBest[0] (not nested in PronunciationAssessment)
+      const pa = best.PronunciationAssessment ?? best
 
       const words: WordResult[] = (best.Words ?? []).map((w: {
         Word: string
+        AccuracyScore?: number
+        ErrorType?: string
         PronunciationAssessment?: { AccuracyScore?: number; ErrorType?: string }
       }) => ({
         word: w.Word,
-        accuracyScore: w.PronunciationAssessment?.AccuracyScore ?? 0,
-        errorType: (w.PronunciationAssessment?.ErrorType ?? 'None') as WordResult['errorType'],
+        accuracyScore: w.AccuracyScore ?? w.PronunciationAssessment?.AccuracyScore ?? 0,
+        errorType: (w.ErrorType ?? w.PronunciationAssessment?.ErrorType ?? 'None') as WordResult['errorType'],
       }))
 
       setResult({
