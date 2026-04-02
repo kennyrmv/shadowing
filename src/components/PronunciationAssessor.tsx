@@ -57,11 +57,16 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
   const [errorMsg, setErrorMsg] = useState('')
 
   const runAssessment = useCallback(async () => {
-    const key = process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY
-    const region = process.env.NEXT_PUBLIC_AZURE_SPEECH_REGION
-
-    if (!key || key === 'your_key_here' || !region) {
-      setErrorMsg('Add your Azure Speech key to .env.local (NEXT_PUBLIC_AZURE_SPEECH_KEY)')
+    // Fetch config from server at runtime — key is never embedded in client bundle
+    let key: string, region: string
+    try {
+      const res = await fetch('/api/speech-config')
+      if (!res.ok) throw new Error('not configured')
+      const config = await res.json()
+      key = config.key
+      region = config.region
+    } catch {
+      setErrorMsg('Azure Speech not configured. Add NEXT_PUBLIC_AZURE_SPEECH_KEY to Railway variables.')
       setStatus('error')
       return
     }
