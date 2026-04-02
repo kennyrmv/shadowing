@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
 
   const cleanKey = key.replace(/\s/g, '')
   const cleanRegion = region.trim()
-  console.log('[assess] key length:', cleanKey.length, 'region:', cleanRegion)
 
   const referenceText = req.nextUrl.searchParams.get('text') ?? ''
   const audioBuffer = await req.arrayBuffer()
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Auth failed ${tokenRes.status}` }, { status: 401 })
   }
   const token = await tokenRes.text()
-  console.log('[assess] token obtained, length:', token.length)
 
   // Step 2: Use token for speech recognition
   const endpoint = `https://${cleanRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
@@ -53,8 +51,6 @@ export async function POST(req: NextRequest) {
   })
 
   const text = await azureRes.text()
-  console.log('[assess] Azure response status:', azureRes.status)
-  console.log('[assess] Azure response body:', text.slice(0, 500))
 
   if (!azureRes.ok) {
     return NextResponse.json(

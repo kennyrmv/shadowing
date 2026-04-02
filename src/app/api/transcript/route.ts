@@ -30,8 +30,6 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  console.log('[env-debug] PROXY_USER:', process.env.NEXT_PUBLIC_WEBSHARE_PROXY_USER ? 'SET' : 'NOT_SET')
-
   try {
     const rawTranscript = await fetchTranscript(videoId)
     const phrases = segmentPhrases(rawTranscript, videoId)
