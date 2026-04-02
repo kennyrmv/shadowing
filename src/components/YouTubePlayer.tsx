@@ -42,6 +42,7 @@ interface YTPlayer {
   setPlaybackRate(rate: number): void
   getCurrentTime(): number
   getPlayerState(): number
+  getVideoData(): { title: string; video_id: string }
   playVideo(): void
   pauseVideo(): void
   destroy(): void
@@ -60,6 +61,7 @@ interface Props {
   videoId: string
   onReady?: () => void
   onStateChange?: (state: number) => void
+  onTitleReady?: (title: string) => void
 }
 
 // ─── Load the YouTube IFrame API script once ───────────────────────────────────
@@ -85,7 +87,7 @@ function loadYouTubeAPI(onReady: () => void) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const YouTubePlayer = forwardRef<YouTubePlayerRef, Props>(
-  ({ videoId, onReady, onStateChange }, ref) => {
+  ({ videoId, onReady, onStateChange, onTitleReady }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const playerRef = useRef<YTPlayer | null>(null)
 
@@ -120,7 +122,13 @@ const YouTubePlayer = forwardRef<YouTubePlayerRef, Props>(
             origin: window.location.origin,
           },
           events: {
-            onReady: () => onReady?.(),
+            onReady: (e) => {
+              onReady?.()
+              try {
+                const title = e.target.getVideoData()?.title
+                if (title) onTitleReady?.(title)
+              } catch { /* title unavailable */ }
+            },
             onStateChange: (e) => onStateChange?.(e.data),
           },
         })

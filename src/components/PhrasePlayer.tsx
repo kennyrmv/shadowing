@@ -22,14 +22,16 @@ import YouTubePlayer, { YouTubePlayerRef } from './YouTubePlayer'
 import PhraseList from './PhraseList'
 import PhraseRecorder from './PhraseRecorder'
 import PronunciationAssessor from './PronunciationAssessor'
-import { Phrase, LoopState, SRSRating } from '@/types'
+import { Phrase, SRSRating } from '@/types'
 import { scorePhrases } from '@/lib/scorePhrases'
 import { addToQueue, ratePhrase, isQueued, exportData } from '@/lib/srs'
 import { recordPhraseSession } from '@/lib/progress'
+import { useAppStore } from '@/store/useAppStore'
 
 interface Props {
   videoId: string
   phrases: Phrase[]
+  onTitleReady?: (title: string) => void
 }
 
 const DIFFICULTY_COLORS = {
@@ -50,20 +52,31 @@ function parseTime(input: string): number {
   return Number(trimmed) || 0
 }
 
-export default function PhrasePlayer({ videoId, phrases }: Props) {
+export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) {
   const playerRef = useRef<YouTubePlayerRef>(null)
-  const [activePhrase, setActivePhrase] = useState<Phrase | null>(null)
-  const [loopState, setLoopState] = useState<LoopState>('idle')
-  const [playbackRate, setPlaybackRate] = useState(1)
+
+  // ── State from Zustand store ──
+  const activePhrase = useAppStore((s) => s.activePhrase)
+  const setActivePhrase = useAppStore((s) => s.setActivePhrase)
+  const loopState = useAppStore((s) => s.loopState)
+  const setLoopState = useAppStore((s) => s.setLoopState)
+  const playbackRate = useAppStore((s) => s.playbackRate)
+  const storeSetPlaybackRate = useAppStore((s) => s.setPlaybackRate)
+  const drillMode = useAppStore((s) => s.drillMode)
+  const setDrillMode = useAppStore((s) => s.setDrillMode)
+  const loopsTarget = useAppStore((s) => s.loopsTarget)
+  const setLoopsTarget = useAppStore((s) => s.setLoopsTarget)
+  const loopCount = useAppStore((s) => s.loopCount)
+  const setLoopCount = useAppStore((s) => s.setLoopCount)
+  const incrementLoopCount = useAppStore((s) => s.incrementLoopCount)
+
+  // ── Local-only state (not persisted) ──
   const [isRestarting, setIsRestarting] = useState(false) // visual gap indicator
   const [playerReady, setPlayerReady] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set())
   const [startFromInput, setStartFromInput] = useState('')
   const [startFromSec, setStartFromSec] = useState(0)
-  const [drillMode, setDrillMode] = useState(false)
-  const [loopsTarget, setLoopsTarget] = useState(3)
-  const [loopCount, setLoopCount] = useState(0)  // display only
 
   // Score all phrases once (pure function, useMemo so it doesn't re-run on every render)
   const scoredPhrases = useMemo(() => scorePhrases(phrases), [phrases])
@@ -112,16 +125,16 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
   }, [])
 
   const activePhraseRef = useRef<Phrase | null>(null)
-  const loopStateRef = useRef<LoopState>('idle')
-  const playbackRateRef = useRef(1)
+  const loopStateRef = useRef(loopState)
+  const playbackRateRef = useRef(playbackRate)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const drillModeRef = useRef(false)
-  const loopsTargetRef = useRef(3)
+  const drillModeRef = useRef(drillMode)
+  const loopsTargetRef = useRef(loopsTarget)
   const loopCountRef = useRef(0)  // readable inside setInterval
   const loopEndFiredRef = useRef(false)  // debounce: one increment per loop end
 
-  // Keep refs in sync with state (refs are readable inside setInterval)
-  useEffect(() => { activePhraseRef.current = activePhrase; loopCountRef.current = 0; loopEndFiredRef.current = false; setLoopCount(0) }, [activePhrase])
+  // Keep refs in sync with store state (refs are readable inside setInterval)
+  useEffect(() => { activePhraseRef.current = activePhrase; loopCountRef.current = 0; loopEndFiredRef.current = false; setLoopCount(0) }, [activePhrase, setLoopCount])
   useEffect(() => { loopStateRef.current = loopState }, [loopState])
   useEffect(() => { playbackRateRef.current = playbackRate }, [playbackRate])
   useEffect(() => { drillModeRef.current = drillMode }, [drillMode])
@@ -150,7 +163,7 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
         if (loopEndFiredRef.current) return  // already handled this loop end
         loopEndFiredRef.current = true
         loopCountRef.current += 1
-        setLoopCount(loopCountRef.current)
+        incrementLoopCount()
 
         // Drill mode: advance to next phrase after N loops
         if (drillModeRef.current && loopCountRef.current >= loopsTargetRef.current) {
@@ -186,7 +199,7 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
     }
 
     intervalRef.current = setInterval(tick, Math.max(50, 100 / playbackRateRef.current))
-  }, [])
+  }, [videoId, incrementLoopCount, setActivePhrase, setLoopState])
 
   const stopPolling = useCallback(() => {
     if (intervalRef.current) {
@@ -242,9 +255,9 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
 
   // ─── Speed control ────────────────────────────────────────────────────────────
   const handleRateChange = useCallback((rate: number) => {
-    setPlaybackRate(rate)
+    storeSetPlaybackRate(rate)
     playerRef.current?.setRate(rate)
-  }, [])
+  }, [storeSetPlaybackRate])
 
   // ─── Player state change (e.g. user manually seeks) ──────────────────────────
   const handleStateChange = useCallback((state: number) => {
@@ -266,6 +279,7 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
           videoId={videoId}
           onReady={() => setPlayerReady(true)}
           onStateChange={handleStateChange}
+          onTitleReady={onTitleReady}
         />
 
         {/* Loop status overlay */}
@@ -348,7 +362,7 @@ export default function PhrasePlayer({ videoId, phrases }: Props) {
       <div className="flex items-center gap-3 px-1">
         <span className="text-sm text-gray-500 w-16 shrink-0">Drill</span>
         <button
-          onClick={() => setDrillMode((v) => !v)}
+          onClick={() => setDrillMode(!drillMode)}
           className={`
             px-3 py-1 rounded text-xs font-medium transition-colors
             ${drillMode ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}

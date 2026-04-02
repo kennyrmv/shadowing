@@ -3,16 +3,19 @@
 // ─── Homepage ──────────────────────────────────────────────────────────────────
 //
 // The full user flow:
-//   1. User pastes a YouTube URL
-//   2. Hits Enter or clicks "Load"
-//   3. App fetches transcript from /api/transcript
-//   4. PhrasePlayer renders the video + phrase list
-//   5. User clicks any phrase → it loops
+//   1. User pastes a YouTube URL OR picks from library
+//   2. App fetches transcript (or loads from library)
+//   3. PhrasePlayer renders the video + phrase list
+//   4. User clicks any phrase → it loops
+//   5. User can save video to library for future sessions
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import PhrasePlayer from '@/components/PhrasePlayer'
 import ProgressDashboard from '@/components/ProgressDashboard'
+import VideoLibrary from '@/components/VideoLibrary'
 import { Phrase } from '@/types'
+import { useAppStore, SavedVideo } from '@/store/useAppStore'
+import { scorePhrases } from '@/lib/scorePhrases'
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 
@@ -23,6 +26,13 @@ export default function HomePage() {
   const [loadState, setLoadState] = useState<LoadState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [isPending, startTransition] = useTransition()
+  const videoTitleRef = useRef<string>('')
+
+  const saveVideo = useAppStore((s) => s.saveVideo)
+  const savedVideos = useAppStore((s) => s.savedVideos)
+
+  // Check if current video is already saved
+  const isVideoSaved = videoId ? savedVideos.some((v) => v.videoId === videoId) : false
 
   async function loadVideo(inputUrl: string) {
     const trimmed = inputUrl.trim()
@@ -32,6 +42,7 @@ export default function HomePage() {
     setErrorMsg('')
     setPhrases([])
     setVideoId(null)
+    videoTitleRef.current = ''
 
     startTransition(async () => {
       try {
@@ -57,6 +68,33 @@ export default function HomePage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     loadVideo(url)
+  }
+
+  function handleSaveToLibrary() {
+    if (!videoId || phrases.length === 0) return
+    const scored = scorePhrases(phrases)
+    const video: SavedVideo = {
+      videoId,
+      title: videoTitleRef.current || videoId,
+      url: url.trim(),
+      phrases: scored,
+      savedAt: new Date().toISOString(),
+      totalPhrases: scored.length,
+    }
+    saveVideo(video)
+  }
+
+  function handleSelectFromLibrary(video: SavedVideo) {
+    setVideoId(video.videoId)
+    setPhrases(video.phrases)
+    setUrl(video.url)
+    videoTitleRef.current = video.title
+    setLoadState('loaded')
+    setErrorMsg('')
+  }
+
+  function handleTitleReady(title: string) {
+    videoTitleRef.current = title
   }
 
   const isLoading = loadState === 'loading' || isPending
@@ -122,8 +160,13 @@ export default function HomePage() {
         {/* ── Progress (always visible — the landing and the scoreboard) ── */}
         <ProgressDashboard />
 
+        {/* ── Video Library ── */}
+        {loadState !== 'loaded' && (
+          <VideoLibrary onSelectVideo={handleSelectFromLibrary} />
+        )}
+
         {/* ── Idle / hint ── */}
-        {loadState === 'idle' && (
+        {loadState === 'idle' && savedVideos.length === 0 && (
           <div className="text-center py-8 text-gray-400 space-y-2">
             <p className="text-4xl">🎧</p>
             <p className="text-sm font-medium">Paste a YouTube link to get started</p>
@@ -137,9 +180,35 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ── Loaded: player + phrase list ── */}
+        {/* ── Loaded: save button + player + phrase list ── */}
         {loadState === 'loaded' && videoId && phrases.length > 0 && (
-          <PhrasePlayer videoId={videoId} phrases={phrases} />
+          <>
+            {/* Save to library button */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveToLibrary}
+                disabled={isVideoSaved}
+                className={`
+                  px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  ${isVideoSaved
+                    ? 'bg-green-50 text-green-600 border border-green-200 cursor-default'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }
+                `}
+              >
+                {isVideoSaved ? '✓ Saved to library' : '+ Save to library'}
+              </button>
+              {videoTitleRef.current && (
+                <span className="text-sm text-gray-500 truncate">{videoTitleRef.current}</span>
+              )}
+            </div>
+
+            <PhrasePlayer
+              videoId={videoId}
+              phrases={phrases}
+              onTitleReady={handleTitleReady}
+            />
+          </>
         )}
 
         {/* ── Loaded but no phrases ── */}
