@@ -6,19 +6,26 @@
 
 import sys
 import json
+import os
 
 def make_session():
-    """Build a requests.Session with YouTube cookies from the local browser.
-    Falls back to a plain session if browser-cookie3 is not available or fails."""
+    """Build a requests.Session with browser cookies (local) or proxy (server)."""
+    import requests
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+    })
+
+    # On server: use proxy from env var (format: http://user:pass@host:port)
+    proxy_url = os.environ.get('YOUTUBE_PROXY')
+    if proxy_url:
+        session.proxies = {'http': proxy_url, 'https': proxy_url}
+        return session
+
+    # Local dev: use browser cookies
     try:
-        import requests
         import browser_cookie3
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        })
-        # Try Chrome first, then Safari, then Firefox
         for loader in [browser_cookie3.chrome, browser_cookie3.safari, browser_cookie3.firefox]:
             try:
                 jar = loader(domain_name='.youtube.com')
@@ -26,9 +33,10 @@ def make_session():
                 return session
             except Exception:
                 continue
-        return session
     except ImportError:
-        return None  # library will use default session
+        pass
+
+    return session
 
 
 def main():
