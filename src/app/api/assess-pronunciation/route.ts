@@ -10,7 +10,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Azure Speech not configured' }, { status: 503 })
   }
 
-  console.log('[assess] key length:', key.trim().length, 'region:', region.trim())
+  const cleanKey = key.replace(/\s/g, '')
+  const cleanRegion = region.trim()
+  console.log('[assess] key length:', cleanKey.length, 'region:', cleanRegion)
 
   const referenceText = req.nextUrl.searchParams.get('text') ?? ''
   const audioBuffer = await req.arrayBuffer()
@@ -24,12 +26,12 @@ export async function POST(req: NextRequest) {
 
   const contentType = req.headers.get('content-type') || 'audio/webm'
 
-  const endpoint = `https://${region.trim()}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
+  const endpoint = `https://${cleanRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
 
   const azureRes = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Ocp-Apim-Subscription-Key': key.trim(),
+      'Ocp-Apim-Subscription-Key': cleanKey,
       'Content-Type': contentType,
       'Pronunciation-Assessment': assessConfig,
     },
