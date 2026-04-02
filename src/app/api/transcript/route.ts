@@ -30,8 +30,7 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  console.log('[env-debug] WEBSHARE_PROXY_USER:', process.env.WEBSHARE_PROXY_USER ? 'SET' : 'NOT_SET')
-  console.log('[env-debug] process.env keys:', Object.keys(process.env).filter(k => k.includes('WEBSHARE')).join(', ') || 'NONE')
+  console.log('[env-debug] PROXY_USER:', process.env.NEXT_PUBLIC_WEBSHARE_PROXY_USER ? 'SET' : 'NOT_SET')
 
   try {
     const rawTranscript = await fetchTranscript(videoId)

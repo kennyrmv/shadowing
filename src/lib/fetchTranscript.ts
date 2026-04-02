@@ -51,8 +51,8 @@ export async function fetchTranscript(videoId: string): Promise<RawCaption[]> {
 
   let stdout: string
   try {
-    const proxyUser = process.env.WEBSHARE_PROXY_USER ?? ''
-    const proxyPass = process.env.WEBSHARE_PROXY_PASS ?? ''
+    const proxyUser = process.env.NEXT_PUBLIC_WEBSHARE_PROXY_USER ?? ''
+    const proxyPass = process.env.NEXT_PUBLIC_WEBSHARE_PROXY_PASS ?? ''
     const result = await execFileAsync(
       cachedPython,
       [SCRIPT_PATH, videoId, proxyUser, proxyPass],
