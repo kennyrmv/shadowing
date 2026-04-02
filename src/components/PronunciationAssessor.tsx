@@ -2,10 +2,10 @@
 
 // ─── PronunciationAssessor ─────────────────────────────────────────────────────
 //
-// Records audio with MediaRecorder (works reliably on iOS Safari),
-// then sends to Azure Speech REST API for pronunciation assessment.
+// Records audio via AudioContext (raw PCM → WAV) so Azure receives a format
+// it can reliably decode, avoiding the SNR:0 issue with WebM/Opus on Android.
 //
-// Flow: [Hold to speak] → recording → [Release] → results
+// Flow: [Hold to speak] → recording → [Done] → WAV sent to /api/assess-pronunciation → results
 
 import { useState, useRef, useCallback } from 'react'
 
@@ -43,15 +43,39 @@ function scoreBg(score: number): string {
   return 'bg-red-50 border-red-200 text-red-600'
 }
 
+/** Encode Float32 PCM samples as a WAV blob (16-bit mono) */
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const int16 = new Int16Array(samples.length)
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+  }
+  const buf = new ArrayBuffer(44 + int16.byteLength)
+  const v = new DataView(buf)
+  const str = (o: number, s: string) => {
+    for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i))
+  }
+  str(0, 'RIFF'); v.setUint32(4, 36 + int16.byteLength, true); str(8, 'WAVE')
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)   // PCM
+  v.setUint16(22, 1, true)                                                // mono
+  v.setUint32(24, sampleRate, true)                                       // sample rate
+  v.setUint32(28, sampleRate * 2, true)                                   // byte rate
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true)                    // block align, bits
+  str(36, 'data'); v.setUint32(40, int16.byteLength, true)
+  new Int16Array(buf, 44).set(int16)
+  return new Blob([buf], { type: 'audio/wav' })
+}
+
 export default function PronunciationAssessor({ phraseText, onAssessStart, onAssessDone }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [recordingSec, setRecordingSec] = useState(0)
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const samplesRef = useRef<Float32Array[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const startRecording = useCallback(async () => {
@@ -70,21 +94,25 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
         }
       })
       streamRef.current = stream
-      chunksRef.current = []
+      samplesRef.current = []
 
-      // Pick best supported format for Azure
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', '']
-        .find(t => !t || MediaRecorder.isTypeSupported(t)) ?? ''
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-      mediaRecorderRef.current = mr
+      // Use AudioContext to capture raw PCM — avoids WebM/Opus codec issues with Azure
+      const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      const audioCtx = new AudioCtx({ sampleRate: 16000 })
+      audioCtxRef.current = audioCtx
 
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
+      const source = audioCtx.createMediaStreamSource(stream)
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1)
+      processorRef.current = processor
+
+      processor.onaudioprocess = (e) => {
+        samplesRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)))
       }
 
-      mr.start(250) // collect chunks every 250ms
+      source.connect(processor)
+      processor.connect(audioCtx.destination)
 
-      // Show recording duration
       timerRef.current = setInterval(() => setRecordingSec((s) => s + 1), 1000)
     } catch {
       setErrorMsg('Microphone access denied.')
@@ -96,28 +124,39 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
   const stopAndAssess = useCallback(async () => {
     if (timerRef.current) clearInterval(timerRef.current)
 
-    const mr = mediaRecorderRef.current
-    if (!mr || mr.state === 'inactive') return
+    const processor = processorRef.current
+    if (!processor) return
+    processor.disconnect()
+    processorRef.current = null
+
+    // Stop mic tracks
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+
+    const audioCtx = audioCtxRef.current
+    audioCtxRef.current = null
 
     setStatus('processing')
 
-    // Stop recording and collect audio
-    const audioBlob = await new Promise<Blob>((resolve) => {
-      mr.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop())
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' })
-        resolve(blob)
-      }
-      mr.stop()
-    })
+    // Combine PCM samples and encode as WAV
+    const allSamples = samplesRef.current
+    samplesRef.current = []
+    const totalLength = allSamples.reduce((sum, arr) => sum + arr.length, 0)
+    const combined = new Float32Array(totalLength)
+    let off = 0
+    for (const arr of allSamples) { combined.set(arr, off); off += arr.length }
 
-    // Send audio to our server — it proxies to Azure (key stays server-side)
+    const sampleRate = audioCtx?.sampleRate ?? 16000
+    const wavBlob = encodeWav(combined, sampleRate)
+    await audioCtx?.close()
+
+    // Send WAV to server proxy → Azure
     try {
       const url = `/api/assess-pronunciation?text=${encodeURIComponent(phraseText)}`
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': audioBlob.type || 'audio/webm' },
-        body: audioBlob,
+        headers: { 'Content-Type': 'audio/wav' },
+        body: wavBlob,
       })
 
       if (!res.ok) {
@@ -135,7 +174,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
       }
 
       const best = json.NBest[0]
-      // Azure puts scores directly on NBest[0] (not nested in PronunciationAssessment)
+      // Azure returns scores directly on NBest[0] (not nested in PronunciationAssessment)
       const pa = best.PronunciationAssessment ?? best
 
       const words: WordResult[] = (best.Words ?? []).map((w: {
