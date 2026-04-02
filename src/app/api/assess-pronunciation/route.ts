@@ -26,12 +26,26 @@ export async function POST(req: NextRequest) {
 
   const contentType = req.headers.get('content-type') || 'audio/webm'
 
+  // Step 1: Exchange API key for a short-lived token (works with Foundry keys)
+  const tokenRes = await fetch(
+    `https://${cleanRegion}.api.cognitive.microsoft.com/sts/v1.0/issueToken`,
+    { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': cleanKey } }
+  )
+  if (!tokenRes.ok) {
+    const tokenErr = await tokenRes.text()
+    console.error('[assess] token error:', tokenRes.status, tokenErr.slice(0, 200))
+    return NextResponse.json({ error: `Auth failed ${tokenRes.status}` }, { status: 401 })
+  }
+  const token = await tokenRes.text()
+  console.log('[assess] token obtained, length:', token.length)
+
+  // Step 2: Use token for speech recognition
   const endpoint = `https://${cleanRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
 
   const azureRes = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'Ocp-Apim-Subscription-Key': cleanKey,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': contentType,
       'Pronunciation-Assessment': assessConfig,
     },
