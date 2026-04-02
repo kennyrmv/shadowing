@@ -24,14 +24,12 @@ export async function POST(req: NextRequest) {
 
   const contentType = req.headers.get('content-type') || 'audio/webm'
 
-  // Try both endpoint formats — newer Azure AI Foundry resources use api.cognitive.microsoft.com
-  const endpoint = `https://${region}.api.cognitive.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
+  const endpoint = `https://${region.trim()}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
 
   const azureRes = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Ocp-Apim-Subscription-Key': key.trim(),
-      'api-key': key.trim(),
       'Content-Type': contentType,
       'Pronunciation-Assessment': assessConfig,
     },
