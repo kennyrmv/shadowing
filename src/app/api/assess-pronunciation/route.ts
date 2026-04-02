@@ -1,0 +1,49 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+// Proxies pronunciation assessment to Azure Speech REST API.
+// The key never leaves the server.
+export async function POST(req: NextRequest) {
+  const key = process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY
+  const region = process.env.NEXT_PUBLIC_AZURE_SPEECH_REGION
+
+  if (!key || key === 'your_key_here' || !region) {
+    return NextResponse.json({ error: 'Azure Speech not configured' }, { status: 503 })
+  }
+
+  const referenceText = req.nextUrl.searchParams.get('text') ?? ''
+  const audioBuffer = await req.arrayBuffer()
+
+  const assessConfig = Buffer.from(JSON.stringify({
+    ReferenceText: referenceText,
+    GradingSystem: 'HundredMark',
+    Granularity: 'Word',
+    EnableMiscue: true,
+  })).toString('base64')
+
+  const contentType = req.headers.get('content-type') || 'audio/webm'
+
+  const azureRes = await fetch(
+    `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`,
+    {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': key,
+        'Content-Type': contentType,
+        'Pronunciation-Assessment': assessConfig,
+      },
+      body: audioBuffer,
+    }
+  )
+
+  const text = await azureRes.text()
+
+  if (!azureRes.ok) {
+    console.error('[assess-pronunciation] Azure error:', azureRes.status, text)
+    return NextResponse.json(
+      { error: `Azure error ${azureRes.status}` },
+      { status: azureRes.status }
+    )
+  }
+
+  return NextResponse.json(JSON.parse(text))
+}

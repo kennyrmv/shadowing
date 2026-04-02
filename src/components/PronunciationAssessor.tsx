@@ -101,39 +101,12 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
       streamRef.current?.getTracks().forEach((t) => t.stop())
     })
 
-    // Fetch Azure config from server
-    let key: string, region: string
+    // Send audio to our server — it proxies to Azure (key stays server-side)
     try {
-      const res = await fetch('/api/speech-config')
-      if (!res.ok) throw new Error('not configured')
-      const cfg = await res.json()
-      key = cfg.key
-      region = cfg.region
-    } catch {
-      setErrorMsg('Azure Speech not configured.')
-      setStatus('error')
-      onAssessDone?.()
-      return
-    }
-
-    // Build pronunciation assessment config (base64 encoded JSON)
-    const assessConfig = btoa(JSON.stringify({
-      ReferenceText: phraseText,
-      GradingSystem: 'HundredMark',
-      Granularity: 'Word',
-      EnableMiscue: true,
-    }))
-
-    // Send to Azure REST API
-    try {
-      const url = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
+      const url = `/api/assess-pronunciation?text=${encodeURIComponent(phraseText)}`
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Ocp-Apim-Subscription-Key': key,
-          'Content-Type': audioBlob.type || 'audio/webm',
-          'Pronunciation-Assessment': assessConfig,
-        },
+        headers: { 'Content-Type': audioBlob.type || 'audio/webm' },
         body: audioBlob,
       })
 
