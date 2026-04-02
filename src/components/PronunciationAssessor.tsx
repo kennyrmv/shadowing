@@ -83,6 +83,9 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
 
       const speechConfig = sdk.SpeechConfig.fromSubscription(key, region)
       speechConfig.speechRecognitionLanguage = 'en-US'
+      // Give the user enough time to say the full phrase
+      speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, '5000')
+      speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, '3000')
 
       const pronunciationConfig = new sdk.PronunciationAssessmentConfig(
         phraseText,
