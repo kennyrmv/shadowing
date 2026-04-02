@@ -19,13 +19,22 @@ const STORAGE_KEY = 'shadowing_srs'
 
 // ─── Date helpers ──────────────────────────────────────────────────────────────
 function today(): string {
-  return new Date().toISOString().split('T')[0]  // YYYY-MM-DD
+  // Use local date (not UTC) so due dates don't shift for users in UTC-N timezones
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-function addDays(date: string, days: number): string {
-  const d = new Date(date)
+function addDays(dateStr: string, days: number): string {
+  // Parse as local date (append T00:00 so JS doesn't shift to UTC)
+  const d = new Date(`${dateStr}T00:00:00`)
   d.setDate(d.getDate() + days)
-  return d.toISOString().split('T')[0]
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 // ─── localStorage helpers ──────────────────────────────────────────────────────

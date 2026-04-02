@@ -10,7 +10,12 @@ import { ProgressData, SessionRecord } from '@/types'
 const STORAGE_KEY = 'shadowing_progress'
 
 function today(): string {
-  return new Date().toISOString().split('T')[0]
+  // Use local date (not UTC) so streaks don't break for users in UTC-N timezones
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function loadProgress(): ProgressData {
@@ -106,7 +111,10 @@ export function getLast30Days(): { date: string; count: number }[] {
   for (let i = 29; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
-    const dateStr = d.toISOString().split('T')[0]
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const dateStr = `${year}-${month}-${day}`
     const session = sessions.find((s) => s.date === dateStr)
     result.push({ date: dateStr, count: session?.phrasesCount ?? 0 })
   }
