@@ -2,14 +2,12 @@
 
 // ─── PronunciationAssessor ─────────────────────────────────────────────────────
 //
-// Uses Azure Cognitive Services Pronunciation Assessment to score the user's
-// speech against the active phrase text.
+// Records audio with MediaRecorder (works reliably on iOS Safari),
+// then sends to Azure Speech REST API for pronunciation assessment.
 //
-// Flow:
-//   [Assess] → 1s countdown (mic warms up) → "Speak now" → user speaks →
-//   Azure auto-detects end of speech → scores shown
+// Flow: [Hold to speak] → recording → [Release] → results
 
-import { useState, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 
 interface WordResult {
   word: string
@@ -25,7 +23,7 @@ interface AssessmentResult {
   words: WordResult[]
 }
 
-type Status = 'idle' | 'countdown' | 'listening' | 'processing' | 'done' | 'error'
+type Status = 'idle' | 'recording' | 'processing' | 'done' | 'error'
 
 interface Props {
   phraseText: string
@@ -47,155 +45,176 @@ function scoreBg(score: number): string {
 
 export default function PronunciationAssessor({ phraseText, onAssessStart, onAssessDone }: Props) {
   const [status, setStatus] = useState<Status>('idle')
-  const [countdown, setCountdown] = useState(3)
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [recordingSec, setRecordingSec] = useState(0)
 
-  const runAssessment = useCallback(async () => {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const startRecording = useCallback(async () => {
+    setStatus('recording')
+    setResult(null)
+    setRecordingSec(0)
+    onAssessStart?.()
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      chunksRef.current = []
+
+      const mr = new MediaRecorder(stream)
+      mediaRecorderRef.current = mr
+
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+
+      mr.start(100) // collect chunks every 100ms
+
+      // Show recording duration
+      timerRef.current = setInterval(() => setRecordingSec((s) => s + 1), 1000)
+    } catch {
+      setErrorMsg('Microphone access denied.')
+      setStatus('error')
+      onAssessDone?.()
+    }
+  }, [onAssessStart, onAssessDone])
+
+  const stopAndAssess = useCallback(async () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+
+    const mr = mediaRecorderRef.current
+    if (!mr || mr.state === 'inactive') return
+
+    setStatus('processing')
+
+    // Stop recording and collect audio
+    const audioBlob = await new Promise<Blob>((resolve) => {
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' })
+        resolve(blob)
+      }
+      mr.stop()
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+    })
+
     // Fetch Azure config from server
     let key: string, region: string
     try {
       const res = await fetch('/api/speech-config')
       if (!res.ok) throw new Error('not configured')
-      const config = await res.json()
-      key = config.key
-      region = config.region
+      const cfg = await res.json()
+      key = cfg.key
+      region = cfg.region
     } catch {
       setErrorMsg('Azure Speech not configured.')
       setStatus('error')
+      onAssessDone?.()
       return
     }
 
-    setStatus('countdown')
-    setResult(null)
-    onAssessStart?.()
+    // Build pronunciation assessment config (base64 encoded JSON)
+    const assessConfig = btoa(JSON.stringify({
+      ReferenceText: phraseText,
+      GradingSystem: 'HundredMark',
+      Granularity: 'Word',
+      EnableMiscue: true,
+    }))
 
-    // Countdown 3-2-1 so mic has time to initialize and user gets ready
-    for (let i = 3; i >= 1; i--) {
-      setCountdown(i)
-      await new Promise((r) => setTimeout(r, 700))
-    }
-
-    setStatus('listening')
-
+    // Send to Azure REST API
     try {
-      const sdk = await import('microsoft-cognitiveservices-speech-sdk')
-
-      const speechConfig = sdk.SpeechConfig.fromSubscription(key, region)
-      speechConfig.speechRecognitionLanguage = 'en-US'
-      // Give the user enough time to say the full phrase
-      speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, '5000')
-      speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, '3000')
-
-      const pronunciationConfig = new sdk.PronunciationAssessmentConfig(
-        phraseText,
-        sdk.PronunciationAssessmentGradingSystem.HundredMark,
-        sdk.PronunciationAssessmentGranularity.Word,
-        true
-      )
-
-      const audioConfig = sdk.AudioConfig.fromDefaultMicrophoneInput()
-      const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig)
-      pronunciationConfig.applyTo(recognizer)
-
-      await new Promise<void>((resolve, reject) => {
-        recognizer.recognizeOnceAsync(
-          (sdkResult) => {
-            recognizer.close()
-            setStatus('processing')
-
-            if (sdkResult.reason === sdk.ResultReason.NoMatch || !sdkResult.text) {
-              setErrorMsg('Could not understand. Speak louder and closer to the mic.')
-              setStatus('error')
-              onAssessDone?.()
-              resolve()
-              return
-            }
-
-            try {
-              const assessment = sdk.PronunciationAssessmentResult.fromResult(sdkResult)
-              const jsonStr = sdkResult.properties.getProperty(
-                sdk.PropertyId.SpeechServiceResponse_JsonResult
-              )
-              const json = JSON.parse(jsonStr)
-              const rawWords: Array<{
-                Word: string
-                PronunciationAssessment?: { AccuracyScore?: number; ErrorType?: string }
-              }> = json?.NBest?.[0]?.Words ?? []
-
-              const words: WordResult[] = rawWords.map((w) => ({
-                word: w.Word,
-                accuracyScore: w.PronunciationAssessment?.AccuracyScore ?? 0,
-                errorType: (w.PronunciationAssessment?.ErrorType ?? 'None') as WordResult['errorType'],
-              }))
-
-              setResult({
-                pronunciationScore: Math.round(assessment.pronunciationScore),
-                accuracyScore: Math.round(assessment.accuracyScore),
-                fluencyScore: Math.round(assessment.fluencyScore),
-                completenessScore: Math.round(assessment.completenessScore),
-                words,
-              })
-              setStatus('done')
-            } catch {
-              setErrorMsg('Could not parse assessment result.')
-              setStatus('error')
-            }
-
-            onAssessDone?.()
-            resolve()
-          },
-          (err) => {
-            recognizer.close()
-            setErrorMsg(`Assessment failed: ${err}`)
-            setStatus('error')
-            onAssessDone?.()
-            reject(err)
-          }
-        )
+      const url = `https://${region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=en-US&format=detailed`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': key,
+          'Content-Type': audioBlob.type || 'audio/webm',
+          'Pronunciation-Assessment': assessConfig,
+        },
+        body: audioBlob,
       })
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(`Azure error ${res.status}: ${text}`)
+      }
+
+      const json = await res.json()
+
+      if (!json.NBest?.[0]) {
+        setErrorMsg('Could not understand. Try speaking more clearly.')
+        setStatus('error')
+        onAssessDone?.()
+        return
+      }
+
+      const best = json.NBest[0]
+      const pa = best.PronunciationAssessment
+
+      const words: WordResult[] = (best.Words ?? []).map((w: {
+        Word: string
+        PronunciationAssessment?: { AccuracyScore?: number; ErrorType?: string }
+      }) => ({
+        word: w.Word,
+        accuracyScore: w.PronunciationAssessment?.AccuracyScore ?? 0,
+        errorType: (w.PronunciationAssessment?.ErrorType ?? 'None') as WordResult['errorType'],
+      }))
+
+      setResult({
+        pronunciationScore: Math.round(pa.PronScore ?? pa.AccuracyScore ?? 0),
+        accuracyScore: Math.round(pa.AccuracyScore ?? 0),
+        fluencyScore: Math.round(pa.FluencyScore ?? 0),
+        completenessScore: Math.round(pa.CompletenessScore ?? 0),
+        words,
+      })
+      setStatus('done')
     } catch (err) {
-      setErrorMsg(`Could not start: ${err instanceof Error ? err.message : err}`)
+      setErrorMsg(`Assessment failed: ${err instanceof Error ? err.message : err}`)
       setStatus('error')
-      onAssessDone?.()
     }
-  }, [phraseText, onAssessStart, onAssessDone])
+
+    onAssessDone?.()
+  }, [phraseText, onAssessDone])
 
   return (
     <div className="space-y-3">
-      {/* Trigger / retry button */}
+      {/* Idle / retry */}
       {(status === 'idle' || status === 'error' || status === 'done') && (
         <button
-          onClick={runAssessment}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+          onPointerDown={startRecording}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 active:bg-purple-800 transition-colors select-none"
         >
           <span>🎤</span>
-          {status === 'done' ? 'Assess again' : 'Check pronunciation'}
+          {status === 'done' ? 'Assess again — hold & speak' : 'Hold & speak the phrase'}
         </button>
       )}
 
-      {/* Countdown */}
-      {status === 'countdown' && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-purple-50 border border-purple-200 rounded-lg">
-          <span className="text-2xl font-bold text-purple-600 w-8 text-center">{countdown}</span>
-          <span className="text-sm text-purple-700">Get ready to speak the phrase...</span>
-        </div>
-      )}
-
-      {/* Listening */}
-      {status === 'listening' && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-600" />
-          </span>
-          <span className="text-sm text-purple-700 font-medium">Listening — speak now!</span>
+      {/* Recording */}
+      {status === 'recording' && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600" />
+            </span>
+            <span className="text-sm text-red-700 font-medium">Recording... {recordingSec}s</span>
+          </div>
+          <button
+            onPointerUp={stopAndAssess}
+            onClick={stopAndAssess}
+            className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-medium"
+          >
+            Done — tap to analyze
+          </button>
         </div>
       )}
 
       {/* Processing */}
       {status === 'processing' && (
-        <div className="text-sm text-gray-400 px-1">Analyzing...</div>
+        <div className="text-sm text-gray-400 px-1">Analyzing your pronunciation...</div>
       )}
 
       {/* Error */}
@@ -217,16 +236,12 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
               {result.words.map((w, i) => (
                 <span
                   key={i}
-                  title={`${w.accuracyScore}/100${w.errorType !== 'None' ? ` — ${w.errorType}` : ''}`}
-                  className={`
-                    text-sm font-medium px-1.5 py-0.5 rounded
-                    ${w.errorType === 'Omission'
-                      ? 'line-through text-gray-300'
-                      : w.errorType === 'Insertion'
-                        ? 'text-gray-400 italic'
-                        : scoreColor(w.accuracyScore)
-                    }
-                  `}
+                  title={`${w.accuracyScore}/100`}
+                  className={`text-sm font-medium px-1.5 py-0.5 rounded ${
+                    w.errorType === 'Omission' ? 'line-through text-gray-300' :
+                    w.errorType === 'Insertion' ? 'text-gray-400 italic' :
+                    scoreColor(w.accuracyScore)
+                  }`}
                 >
                   {w.word}
                 </span>
