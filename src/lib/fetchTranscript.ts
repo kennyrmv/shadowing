@@ -54,7 +54,7 @@ export async function fetchTranscript(videoId: string): Promise<RawCaption[]> {
     const result = await execFileAsync(
       cachedPython,
       [SCRIPT_PATH, videoId],
-      { timeout: 20000 }  // 20s timeout
+      { timeout: 20000, env: { ...process.env } }  // explicitly pass env so YOUTUBE_PROXY reaches Python
     )
     stdout = result.stdout
   } catch (err: unknown) {
