@@ -13,13 +13,16 @@ import { useState, useTransition, useRef } from 'react'
 import PhrasePlayer from '@/components/PhrasePlayer'
 import ProgressDashboard from '@/components/ProgressDashboard'
 import VideoLibrary from '@/components/VideoLibrary'
+import DailyPractice from '@/components/DailyPractice'
 import { Phrase } from '@/types'
 import { useAppStore, SavedVideo } from '@/store/useAppStore'
 import { scorePhrases } from '@/lib/scorePhrases'
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
+type Tab = 'practice' | 'daily'
 
 export default function HomePage() {
+  const [tab, setTab] = useState<Tab>('practice')
   const [url, setUrl] = useState('')
   const [videoId, setVideoId] = useState<string | null>(null)
   const [phrases, setPhrases] = useState<Phrase[]>([])
@@ -113,6 +116,34 @@ export default function HomePage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+        {/* ── Tabs ── */}
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+          {([
+            { id: 'practice', label: '🎧 Practice' },
+            { id: 'daily',    label: '📅 Daily' },
+          ] as const).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`
+                flex-1 py-2 rounded-lg text-sm font-medium transition-colors
+                ${tab === id
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+                }
+              `}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Daily Practice tab ── */}
+        {tab === 'daily' && <DailyPractice />}
+
+        {/* ── Practice tab ── */}
+        {tab === 'practice' && <>
+
         {/* ── URL input ── */}
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -219,6 +250,8 @@ export default function HomePage() {
             </p>
           </div>
         )}
+
+        </> /* end practice tab */}
       </div>
     </main>
   )
