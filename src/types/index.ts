@@ -67,6 +67,7 @@ export interface ExtractedClip {
   clipUrl: string           // presigned R2 URL for video segment
   audioUrl: string          // presigned R2 URL for audio-only WAV
   prosodyUrl: string        // presigned R2 URL for prosody profile JSON
+  prosodyProfile?: ProsodyProfile  // inline prosody data (avoids CORS fetch)
   extractedAt: string       // ISO timestamp
   expiresAt: string         // presigned URL expiry (ISO)
 }

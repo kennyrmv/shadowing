@@ -134,6 +134,7 @@ async function runExtraction(jobId: string, videoId: string, phrases: PhraseInpu
         clipUrl,
         audioUrl,
         prosodyUrl,
+        prosodyProfile: JSON.parse(prosodyProfile),
         extractedAt: new Date().toISOString(),
         expiresAt,
       })

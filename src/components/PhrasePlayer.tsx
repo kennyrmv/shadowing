@@ -154,7 +154,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const loopCountRef = useRef(0)  // readable inside setInterval
   const loopEndFiredRef = useRef(false)  // debounce: one increment per loop end
 
-  // Reset scores when phrase changes + fetch native prosody profile if available
+  // Reset scores when phrase changes + load native prosody profile from store
   useEffect(() => {
     setLastAzureScores(null)
     setProsodyScores(null)
@@ -163,13 +163,10 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
 
     if (!activePhrase) return
     const clip = extractedClips[activePhrase.id]
-    if (!clip?.prosodyUrl) return
+    if (!clip?.prosodyProfile) return
 
-    // Fetch native prosody profile from R2
-    fetch(clip.prosodyUrl)
-      .then((res) => res.json())
-      .then((profile: ProsodyProfile) => setNativeProfile(profile))
-      .catch(() => { /* prosody profile unavailable */ })
+    // Read prosody directly from store (no CORS issues)
+    setNativeProfile(clip.prosodyProfile)
   }, [activePhrase?.id, extractedClips])
 
   // Keep refs in sync with store state (refs are readable inside setInterval)
