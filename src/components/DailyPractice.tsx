@@ -10,7 +10,7 @@
 //
 // View states:
 //   empty    → library has no videos yet
-//   summary  → session preview + Start button
+//   summary  → session preview + Start button (+ level-up banner when ready)
 //   practice → PracticePhaseView for the current phrase
 //   done     → session complete
 
@@ -19,6 +19,8 @@ import { useAppStore } from '@/store/useAppStore'
 import { buildDailySession, estimateMinutes } from '@/lib/sessionBuilder'
 import { addToQueue, ratePhrase } from '@/lib/srs'
 import { recordPhraseSession } from '@/lib/progress'
+import { getLevelReport } from '@/lib/adaptiveDifficulty'
+import type { Level } from '@/lib/adaptiveDifficulty'
 import PracticePhaseView from '@/components/PracticePhaseView'
 import type { PracticeItem } from '@/components/PracticePhaseView'
 import type { AzureScores } from '@/lib/autoRate'
@@ -26,25 +28,39 @@ import type { SRSRating } from '@/types'
 
 type View = 'empty' | 'summary' | 'practice' | 'done'
 
+const LEVEL_LABEL: Record<Level, string> = { easy: 'easy', medium: 'medium', hard: 'hard' }
+
 export default function DailyPractice() {
   const savedVideos         = useAppStore((s) => s.savedVideos)
+  const scoreHistory        = useAppStore((s) => s.scoreHistory)
   const dailySession        = useAppStore((s) => s.dailySession)
   const setDailySession     = useAppStore((s) => s.setDailySession)
   const markPhraseCompleted = useAppStore((s) => s.markPhraseCompleted)
 
+  // ── Adaptive difficulty ──────────────────────────────────────────────────────
+  const levelReport = useMemo(
+    () => getLevelReport(scoreHistory, savedVideos),
+    [scoreHistory, savedVideos],
+  )
+
+  // preferredLevel: null = auto (use levelReport.currentLevel), or user-chosen override
+  const [preferredLevel, setPreferredLevel] = useState<Level | null>(null)
+  const effectiveLevel: Level = preferredLevel ?? levelReport.currentLevel
+
+  // ── View / session state ─────────────────────────────────────────────────────
   const [view, setView]       = useState<View>(savedVideos.length === 0 ? 'empty' : 'summary')
   const [currentIndex, setCurrentIndex] = useState(0)
   const [previewSession, setPreviewSession] = useState(() =>
-    savedVideos.length > 0 ? buildDailySession(savedVideos) : null
+    savedVideos.length > 0 ? buildDailySession(savedVideos, 15, effectiveLevel) : null
   )
 
-  // Rebuild preview when library changes
+  // Rebuild preview when library or effective level changes
   useEffect(() => {
     if (savedVideos.length > 0) {
-      setPreviewSession(buildDailySession(savedVideos))
+      setPreviewSession(buildDailySession(savedVideos, 15, effectiveLevel))
       if (view === 'empty') setView('summary')
     }
-  }, [savedVideos.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [savedVideos.length, effectiveLevel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Build flat ordered list of items from the active session ────────────────
   const items = useMemo<PracticeItem[]>(() => {
@@ -144,7 +160,7 @@ export default function DailyPractice() {
         <button
           onClick={() => {
             setDailySession(null)
-            setPreviewSession(buildDailySession(savedVideos))
+            setPreviewSession(buildDailySession(savedVideos, 15, effectiveLevel))
             setCurrentIndex(0)
             setView('summary')
           }}
@@ -163,17 +179,69 @@ export default function DailyPractice() {
     const mins        = previewSession ? estimateMinutes(previewSession) : 0
     const isEmpty     = reviewCount + newCount === 0
 
+    // Show level-up banner when user has mastered current level and hasn't overridden yet
+    const showLevelUp =
+      levelReport.readyToProgress &&
+      levelReport.nextLevel !== null &&
+      preferredLevel === null
+
     return (
       <div className="bg-white border border-gray-100 rounded-xl p-6 space-y-5">
+
+        {/* ── Level-up recommendation banner ── */}
+        {showLevelUp && levelReport.nextLevel && (
+          <div className="bg-green-50 border border-green-100 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="text-lg leading-none">🎯</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-green-800">
+                  You&apos;re mastering {LEVEL_LABEL[levelReport.currentLevel]}!
+                </p>
+                <p className="text-xs text-green-600 mt-0.5">
+                  Avg score {levelReport.avgComposite} over {levelReport.attempts} phrases.
+                  Ready to try {LEVEL_LABEL[levelReport.nextLevel]}?
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPreferredLevel(levelReport.nextLevel)}
+                className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors"
+              >
+                Try {LEVEL_LABEL[levelReport.nextLevel!]} →
+              </button>
+              <button
+                onClick={() => setPreferredLevel(levelReport.currentLevel)}
+                className="flex-1 py-2 bg-white border border-green-200 text-green-700 rounded-lg text-xs font-medium hover:bg-green-50 transition-colors"
+              >
+                Keep {LEVEL_LABEL[levelReport.currentLevel]}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Session header ── */}
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Today&apos;s practice</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Today&apos;s practice</p>
+            {/* Level chip — only when user has enough data to show a level */}
+            {levelReport.attempts > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                effectiveLevel === 'easy'   ? 'bg-green-50 text-green-600' :
+                effectiveLevel === 'medium' ? 'bg-yellow-50 text-yellow-600' :
+                                              'bg-red-50 text-red-500'
+              }`}>
+                {effectiveLevel}
+              </span>
+            )}
+          </div>
           {isEmpty ? (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 mt-1">
               All caught up! Add more videos to your library to get new phrases.
             </p>
           ) : (
             <>
-              <p className="text-lg font-semibold text-gray-900">
+              <p className="text-lg font-semibold text-gray-900 mt-1">
                 {reviewCount > 0 && `${reviewCount} review`}
                 {reviewCount > 0 && newCount > 0 && ' + '}
                 {newCount > 0 && `${newCount} new`}
@@ -210,7 +278,7 @@ export default function DailyPractice() {
 
             <button
               onClick={() => {
-                const session = buildDailySession(savedVideos)
+                const session = buildDailySession(savedVideos, 15, effectiveLevel)
                 session.startedAt = new Date().toISOString()
                 setDailySession(session)
                 setCurrentIndex(0)

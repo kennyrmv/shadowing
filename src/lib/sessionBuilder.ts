@@ -56,7 +56,11 @@ function selectNewPhrases(
 }
 
 /** Build a daily practice session for the given library. */
-export function buildDailySession(library: SavedVideo[], targetMinutes = 15): DailySession {
+export function buildDailySession(
+  library: SavedVideo[],
+  targetMinutes = 15,
+  level: 'easy' | 'medium' | 'hard' = 'easy',
+): DailySession {
   const due = getDueToday()
   const reviewPhrases = due.slice(0, MAX_REVIEW)
 
@@ -64,7 +68,7 @@ export function buildDailySession(library: SavedVideo[], targetMinutes = 15): Da
   const remainingMinutes = Math.max(0, targetMinutes - reviewMinutes)
   const newCount = Math.max(3, Math.floor(remainingMinutes / MINUTES_PER_PHRASE))
 
-  const newPhrases = selectNewPhrases(library, newCount, 'easy')
+  const newPhrases = selectNewPhrases(library, newCount, level)
 
   return {
     id: `session-${Date.now()}`,
