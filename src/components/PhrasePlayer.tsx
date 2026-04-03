@@ -27,6 +27,8 @@ import { scorePhrases } from '@/lib/scorePhrases'
 import { addToQueue, ratePhrase, isQueued, exportData } from '@/lib/srs'
 import { recordPhraseSession } from '@/lib/progress'
 import { useAppStore } from '@/store/useAppStore'
+import { azureToSRS, compositeScore } from '@/lib/autoRate'
+import type { AzureScores } from '@/lib/autoRate'
 
 interface Props {
   videoId: string
@@ -77,6 +79,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set())
   const [startFromInput, setStartFromInput] = useState('')
   const [startFromSec, setStartFromSec] = useState(0)
+  const [lastAzureScores, setLastAzureScores] = useState<AzureScores | null>(null)
 
   // Score all phrases once (pure function, useMemo so it doesn't re-run on every render)
   const scoredPhrases = useMemo(() => scorePhrases(phrases), [phrases])
@@ -132,6 +135,9 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const loopsTargetRef = useRef(loopsTarget)
   const loopCountRef = useRef(0)  // readable inside setInterval
   const loopEndFiredRef = useRef(false)  // debounce: one increment per loop end
+
+  // Reset Azure suggestion when phrase changes
+  useEffect(() => { setLastAzureScores(null) }, [activePhrase?.id])
 
   // Keep refs in sync with store state (refs are readable inside setInterval)
   useEffect(() => { activePhraseRef.current = activePhrase; loopCountRef.current = 0; loopEndFiredRef.current = false; setLoopCount(0) }, [activePhrase, setLoopCount])
@@ -228,6 +234,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
     if (!activePhrase) return
     ratePhrase(activePhrase.id, rating)
     recordPhraseSession(videoId)
+    setLastAzureScores(null)
   }, [activePhrase, videoId])
 
   // ─── Click a phrase in the list ──────────────────────────────────────────────
@@ -447,6 +454,8 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
             onRate={handleRate}
             isQueued={queuedIds.has(activePhrase.id) || isQueued(activePhrase.id)}
             onAddToQueue={handleAddToQueue}
+            suggestedRating={lastAzureScores ? azureToSRS(lastAzureScores) : undefined}
+            azureComposite={lastAzureScores ? compositeScore(lastAzureScores) : undefined}
           />
 
           <div className="border-t border-gray-100 pt-3">
@@ -462,6 +471,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
                 playerRef.current?.play()
                 setLoopState('playing')
               }}
+              onScoreReady={setLastAzureScores}
             />
           </div>
         </div>

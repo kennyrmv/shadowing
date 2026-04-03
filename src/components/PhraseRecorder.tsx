@@ -4,14 +4,15 @@
 //
 // Records the user's voice and shows a waveform using WaveSurfer.js.
 //
+// SRS rating flow:
+//   - If Azure assessment was done first → shows auto-suggested rating highlighted
+//     with Hard/Easy as override options. User taps to confirm or override.
+//   - If user records manually → shows "How did it feel?" with all three options.
+//   - Both paths converge on onRate(rating) → SRS updated.
+//
 // NOTE: In v1, we only show the USER's recording waveform.
 // Native speaker waveform comparison requires downloading YouTube audio,
 // which is blocked by browser CORS rules. See TODOS.md for Phase 2.
-//
-// Flow:
-//   [Record] clicked → MediaRecorder starts → user shadows the phrase
-//   [Stop] clicked   → recording stops → WaveSurfer renders waveform
-//   User plays back their recording → rates it (Hard / Good / Easy)
 
 import { useState, useRef, useEffect } from 'react'
 import { SRSRating } from '@/types'
@@ -20,11 +21,19 @@ interface Props {
   onRate: (rating: SRSRating) => void
   isQueued: boolean
   onAddToQueue: () => void
+  suggestedRating?: SRSRating   // from Azure auto-rating (Task 4)
+  azureComposite?: number        // 0-100 composite score shown in the hint
 }
 
 type RecordState = 'idle' | 'recording' | 'recorded'
 
-export default function PhraseRecorder({ onRate, isQueued, onAddToQueue }: Props) {
+const RATING_LABELS: Record<SRSRating, string> = {
+  1: 'Hard',
+  3: 'Good',
+  5: 'Easy',
+}
+
+export default function PhraseRecorder({ onRate, isQueued, onAddToQueue, suggestedRating, azureComposite }: Props) {
   const [recordState, setRecordState] = useState<RecordState>('idle')
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null)
@@ -149,6 +158,9 @@ export default function PhraseRecorder({ onRate, isQueued, onAddToQueue }: Props
     )
   }
 
+  // Show SRS rating buttons when there's a recording OR an Azure auto-rating
+  const showRating = recordState === 'recorded' || suggestedRating !== undefined
+
   return (
     <div className="space-y-3">
       {/* ── Add to drill queue button ── */}
@@ -206,36 +218,64 @@ export default function PhraseRecorder({ onRate, isQueued, onAddToQueue }: Props
         )}
       </div>
 
-      {/* ── Waveform ── */}
+      {/* ── Waveform (only when recorded) ── */}
       {recordState === 'recorded' && (
-        <div className="space-y-3">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-xs text-gray-400 mb-2">Your recording ({duration.toFixed(1)}s)</p>
-            <div ref={waveformRef} />
-          </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-400 mb-2">Your recording ({duration.toFixed(1)}s)</p>
+          <div ref={waveformRef} />
+        </div>
+      )}
 
-          {/* ── SRS rating ── */}
-          <div>
-            <p className="text-xs text-gray-500 mb-2">How did it feel?</p>
-            <div className="flex gap-2">
-              {([
-                { rating: 1 as SRSRating, label: 'Hard', color: 'bg-red-100 text-red-700 hover:bg-red-200' },
-                { rating: 3 as SRSRating, label: 'Good', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' },
-                { rating: 5 as SRSRating, label: 'Easy', color: 'bg-green-100 text-green-700 hover:bg-green-200' },
-              ] as const).map(({ rating, label, color }) => (
-                <button
-                  key={rating}
-                  onClick={() => { onRate(rating); resetRecording() }}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${color}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-gray-300 mt-1 text-center">
-              This tells the app when to show you this phrase again
+      {/* ── SRS rating — shows after recording OR after Azure assessment ── */}
+      {showRating && (
+        <div>
+          {/* Label: auto-rating hint OR manual prompt */}
+          {suggestedRating !== undefined ? (
+            <p className="text-xs text-gray-500 mb-2">
+              Score: {azureComposite} →{' '}
+              <span className="font-semibold">{RATING_LABELS[suggestedRating]}</span>
+              <span className="text-gray-300 ml-1">(tap to override)</span>
             </p>
+          ) : (
+            <p className="text-xs text-gray-500 mb-2">How did it feel?</p>
+          )}
+
+          {/* Rating buttons — suggested one is filled, others are ghost */}
+          <div className="flex gap-2">
+            {([
+              {
+                rating: 1 as SRSRating,
+                label: 'Hard',
+                ghost: 'bg-red-100 text-red-700 hover:bg-red-200',
+                active: 'bg-red-500 text-white hover:bg-red-600',
+              },
+              {
+                rating: 3 as SRSRating,
+                label: 'Good',
+                ghost: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200',
+                active: 'bg-yellow-500 text-white hover:bg-yellow-600',
+              },
+              {
+                rating: 5 as SRSRating,
+                label: 'Easy',
+                ghost: 'bg-green-100 text-green-700 hover:bg-green-200',
+                active: 'bg-green-500 text-white hover:bg-green-600',
+              },
+            ] as const).map(({ rating, label, ghost, active }) => (
+              <button
+                key={rating}
+                onClick={() => { onRate(rating); resetRecording() }}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  suggestedRating === rating ? active : ghost
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+          <p className="text-xs text-gray-300 mt-1 text-center">
+            This tells the app when to show you this phrase again
+          </p>
         </div>
       )}
     </div>

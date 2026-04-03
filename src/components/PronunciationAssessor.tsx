@@ -10,6 +10,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import type { ScoreRecord } from '@/store/useAppStore'
+import type { AzureScores } from '@/lib/autoRate'
 
 interface WordResult {
   word: string
@@ -33,6 +34,7 @@ interface Props {
   videoId?: string
   onAssessStart?: () => void
   onAssessDone?: () => void
+  onScoreReady?: (scores: AzureScores) => void
 }
 
 function scoreColor(score: number): string {
@@ -70,7 +72,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buf], { type: 'audio/wav' })
 }
 
-export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone }: Props) {
+export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone, onScoreReady }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -214,6 +216,8 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
         addScore(record)
       }
 
+      onScoreReady?.({ accuracy, fluency, completeness })
+
       setResult({ pronunciationScore: pronunciation, accuracyScore: accuracy, fluencyScore: fluency, completenessScore: completeness, words })
       setStatus('done')
     } catch (err) {
@@ -222,7 +226,7 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
     }
 
     onAssessDone?.()
-  }, [phraseText, phraseId, videoId, addScore, onAssessDone])
+  }, [phraseText, phraseId, videoId, addScore, onAssessDone, onScoreReady])
 
   return (
     <div className="space-y-3">
