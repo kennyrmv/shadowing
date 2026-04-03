@@ -8,6 +8,8 @@
 // Flow: [Hold to speak] → recording → [Done] → WAV sent to /api/assess-pronunciation → results
 
 import { useState, useRef, useCallback } from 'react'
+import { useAppStore } from '@/store/useAppStore'
+import type { ScoreRecord } from '@/store/useAppStore'
 
 interface WordResult {
   word: string
@@ -27,6 +29,8 @@ type Status = 'idle' | 'recording' | 'processing' | 'done' | 'error'
 
 interface Props {
   phraseText: string
+  phraseId?: string
+  videoId?: string
   onAssessStart?: () => void
   onAssessDone?: () => void
 }
@@ -66,11 +70,13 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buf], { type: 'audio/wav' })
 }
 
-export default function PronunciationAssessor({ phraseText, onAssessStart, onAssessDone }: Props) {
+export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [recordingSec, setRecordingSec] = useState(0)
+
+  const addScore = useAppStore((s) => s.addScore)
 
   const streamRef = useRef<MediaStream | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -188,13 +194,27 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
         errorType: (w.ErrorType ?? w.PronunciationAssessment?.ErrorType ?? 'None') as WordResult['errorType'],
       }))
 
-      setResult({
-        pronunciationScore: Math.round(pa.PronScore ?? pa.AccuracyScore ?? 0),
-        accuracyScore: Math.round(pa.AccuracyScore ?? 0),
-        fluencyScore: Math.round(pa.FluencyScore ?? 0),
-        completenessScore: Math.round(pa.CompletenessScore ?? 0),
-        words,
-      })
+      const pronunciation = Math.round(pa.PronScore ?? pa.AccuracyScore ?? 0)
+      const accuracy = Math.round(pa.AccuracyScore ?? 0)
+      const fluency = Math.round(pa.FluencyScore ?? 0)
+      const completeness = Math.round(pa.CompletenessScore ?? 0)
+
+      if (phraseId) {
+        const record: ScoreRecord = {
+          id: `${phraseId}:${Date.now()}`,
+          phraseId,
+          videoId: videoId ?? '',
+          timestamp: new Date().toISOString(),
+          pronunciation,
+          accuracy,
+          fluency,
+          completeness,
+          words: words.map((w) => ({ word: w.word, accuracy: w.accuracyScore, errorType: w.errorType })),
+        }
+        addScore(record)
+      }
+
+      setResult({ pronunciationScore: pronunciation, accuracyScore: accuracy, fluencyScore: fluency, completenessScore: completeness, words })
       setStatus('done')
     } catch (err) {
       setErrorMsg(`Assessment failed: ${err instanceof Error ? err.message : err}`)
@@ -202,7 +222,7 @@ export default function PronunciationAssessor({ phraseText, onAssessStart, onAss
     }
 
     onAssessDone?.()
-  }, [phraseText, onAssessDone])
+  }, [phraseText, phraseId, videoId, addScore, onAssessDone])
 
   return (
     <div className="space-y-3">

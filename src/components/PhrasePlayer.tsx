@@ -452,6 +452,8 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
           <div className="border-t border-gray-100 pt-3">
             <PronunciationAssessor
               phraseText={activePhrase.text}
+              phraseId={activePhrase.id}
+              videoId={videoId}
               onAssessStart={() => {
                 playerRef.current?.pause()
                 setLoopState('paused')
