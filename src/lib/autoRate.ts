@@ -35,3 +35,24 @@ export function azureToSRS(scores: AzureScores): SRSRating {
   if (composite >= 60) return 3
   return 1
 }
+
+/**
+ * Combined composite score incorporating prosody when available.
+ * Azure measures pronunciation correctness (60% weight).
+ * Prosody measures naturalness: intonation, rhythm, stress (40% weight).
+ */
+export function combinedComposite(azure: AzureScores, prosodyOverall?: number): number {
+  const azureScore = compositeScore(azure)
+  if (prosodyOverall == null) return azureScore
+  return Math.round(azureScore * 0.6 + prosodyOverall * 0.4)
+}
+
+/**
+ * SRS rating from combined Azure + prosody scores.
+ */
+export function combinedToSRS(azure: AzureScores, prosodyOverall?: number): SRSRating {
+  const combined = combinedComposite(azure, prosodyOverall)
+  if (combined >= 85) return 5
+  if (combined >= 60) return 3
+  return 1
+}

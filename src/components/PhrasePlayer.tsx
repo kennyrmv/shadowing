@@ -19,15 +19,19 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import YouTubePlayer, { YouTubePlayerRef } from './YouTubePlayer'
+import VideoClipPlayer from './VideoClipPlayer'
 import PhraseList from './PhraseList'
 import PhraseRecorder from './PhraseRecorder'
 import PronunciationAssessor from './PronunciationAssessor'
+import ProsodyFeedback from './ProsodyFeedback'
 import { Phrase, SRSRating } from '@/types'
+import type { ProsodyProfile, UserProsody, ProsodyScores } from '@/types'
 import { scorePhrases } from '@/lib/scorePhrases'
 import { addToQueue, ratePhrase, isQueued, exportData } from '@/lib/srs'
 import { recordPhraseSession } from '@/lib/progress'
 import { useAppStore } from '@/store/useAppStore'
-import { azureToSRS, compositeScore } from '@/lib/autoRate'
+import { azureToSRS, compositeScore, combinedToSRS, combinedComposite } from '@/lib/autoRate'
+import { compareProsody } from '@/lib/prosodyScore'
 import type { AzureScores } from '@/lib/autoRate'
 
 interface Props {
@@ -72,6 +76,15 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const setLoopCount = useAppStore((s) => s.setLoopCount)
   const incrementLoopCount = useAppStore((s) => s.incrementLoopCount)
 
+  // ── Extraction state from store ──
+  const extractedClips = useAppStore((s) => s.extractedClips)
+  const extractionStatus = useAppStore((s) => s.extractionStatus)
+  const selectedPhraseIds = useAppStore((s) => s.selectedPhraseIds)
+  const setExtractionStatus = useAppStore((s) => s.setExtractionStatus)
+  const togglePhraseSelection = useAppStore((s) => s.togglePhraseSelection)
+  const clearPhraseSelection = useAppStore((s) => s.clearPhraseSelection)
+  const addExtractedClip = useAppStore((s) => s.addExtractedClip)
+
   // ── Local-only state (not persisted) ──
   const [isRestarting, setIsRestarting] = useState(false) // visual gap indicator
   const [playerReady, setPlayerReady] = useState(false)
@@ -80,6 +93,11 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const [startFromInput, setStartFromInput] = useState('')
   const [startFromSec, setStartFromSec] = useState(0)
   const [lastAzureScores, setLastAzureScores] = useState<AzureScores | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [extractionProgress, setExtractionProgress] = useState('')
+  const [nativeProfile, setNativeProfile] = useState<ProsodyProfile | null>(null)
+  const [userProsody, setUserProsody] = useState<UserProsody | null>(null)
+  const [prosodyScores, setProsodyScores] = useState<ProsodyScores | null>(null)
 
   // Score all phrases once (pure function, useMemo so it doesn't re-run on every render)
   const scoredPhrases = useMemo(() => scorePhrases(phrases), [phrases])
@@ -136,8 +154,23 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const loopCountRef = useRef(0)  // readable inside setInterval
   const loopEndFiredRef = useRef(false)  // debounce: one increment per loop end
 
-  // Reset Azure suggestion when phrase changes
-  useEffect(() => { setLastAzureScores(null) }, [activePhrase?.id])
+  // Reset scores when phrase changes + fetch native prosody profile if available
+  useEffect(() => {
+    setLastAzureScores(null)
+    setProsodyScores(null)
+    setUserProsody(null)
+    setNativeProfile(null)
+
+    if (!activePhrase) return
+    const clip = extractedClips[activePhrase.id]
+    if (!clip?.prosodyUrl) return
+
+    // Fetch native prosody profile from R2
+    fetch(clip.prosodyUrl)
+      .then((res) => res.json())
+      .then((profile: ProsodyProfile) => setNativeProfile(profile))
+      .catch(() => { /* prosody profile unavailable */ })
+  }, [activePhrase?.id, extractedClips])
 
   // Keep refs in sync with store state (refs are readable inside setInterval)
   useEffect(() => { activePhraseRef.current = activePhrase; loopCountRef.current = 0; loopEndFiredRef.current = false; setLoopCount(0) }, [activePhrase, setLoopCount])
@@ -158,7 +191,11 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
       if (!phrase || state !== 'playing') return
 
       const current = playerRef.current?.getCurrentTime() ?? 0
-      const endTime = phrase.startTime + phrase.duration
+      // For extracted clips, the clip starts at 0; for YouTube, use phrase.startTime
+      const clips = useAppStore.getState().extractedClips
+      const hasClip = !!clips[phrase.id]
+      const startTime = hasClip ? 0 : phrase.startTime
+      const endTime = startTime + phrase.duration
 
       // Reset the end-fired guard once the player has actually seeked back
       if (loopEndFiredRef.current && current < endTime - 0.5) {
@@ -181,7 +218,8 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
             activePhraseRef.current = next
             setActivePhrase(next)
             setIsRestarting(false)
-            playerRef.current?.seekTo(next.startTime)
+            const nextHasClip = !!clips[next.id]
+            playerRef.current?.seekTo(nextHasClip ? 0 : next.startTime)
           } else {
             // End of phrase list — stop
             setLoopState('paused')
@@ -193,7 +231,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
         setIsRestarting(true)
         setTimeout(() => {
           if (loopStateRef.current === 'playing') {
-            playerRef.current?.seekTo(phrase.startTime)
+            playerRef.current?.seekTo(startTime)
             setIsRestarting(false)
           }
         }, LOOP_GAP_MS)
@@ -257,14 +295,73 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
     setActivePhrase(phrase)
     setLoopState('playing')
     setIsRestarting(false)
-    playerRef.current?.seekTo(phrase.startTime)
-  }, [activePhrase, loopState, playerReady])
+    // For clips, seek to 0 (clip IS the phrase); for YouTube, seek to phrase.startTime
+    const hasClip = !!extractedClips[phrase.id]
+    playerRef.current?.seekTo(hasClip ? 0 : phrase.startTime)
+  }, [activePhrase, loopState, playerReady, extractedClips])
 
   // ─── Speed control ────────────────────────────────────────────────────────────
   const handleRateChange = useCallback((rate: number) => {
     storeSetPlaybackRate(rate)
     playerRef.current?.setRate(rate)
   }, [storeSetPlaybackRate])
+
+  // ─── Extract selected phrases ─────────────────────────────────────────────────
+  const handleExtract = useCallback(async () => {
+    if (selectedPhraseIds.length === 0) return
+    setExtractionStatus('extracting')
+    setExtractionProgress('Starting extraction...')
+
+    const phrasesToExtract = displayPhrases.filter((p) => selectedPhraseIds.includes(p.id))
+
+    try {
+      const res = await fetch('/api/extract-phrases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId,
+          phrases: phrasesToExtract.map((p) => ({
+            id: p.id,
+            startTime: p.startTime,
+            duration: p.duration,
+            text: p.text,
+          })),
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+
+      const { jobId } = await res.json()
+
+      // Poll for completion
+      const poll = async () => {
+        const statusRes = await fetch(`/api/extract-phrases/status?jobId=${jobId}`)
+        const statusData = await statusRes.json()
+
+        if (statusData.status === 'done') {
+          for (const clip of statusData.clips) {
+            addExtractedClip(clip)
+          }
+          setExtractionStatus('done')
+          setExtractionProgress('')
+          clearPhraseSelection()
+          setSelectMode(false)
+        } else if (statusData.status === 'error') {
+          throw new Error(statusData.error || 'Extraction failed')
+        } else {
+          setExtractionProgress(statusData.progress || 'Processing...')
+          setTimeout(poll, 2000)
+        }
+      }
+
+      await poll()
+    } catch (err) {
+      setExtractionStatus('error')
+      setExtractionProgress(`Error: ${err instanceof Error ? err.message : err}`)
+    }
+  }, [selectedPhraseIds, displayPhrases, videoId, addExtractedClip, setExtractionStatus, clearPhraseSelection])
 
   // ─── Player state change (e.g. user manually seeks) ──────────────────────────
   const handleStateChange = useCallback((state: number) => {
@@ -279,15 +376,25 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Video player ── */}
+      {/* ── Video player (clip or YouTube) ── */}
       <div className="relative">
-        <YouTubePlayer
-          ref={playerRef}
-          videoId={videoId}
-          onReady={() => setPlayerReady(true)}
-          onStateChange={handleStateChange}
-          onTitleReady={onTitleReady}
-        />
+        {activePhrase && extractedClips[activePhrase.id] ? (
+          <VideoClipPlayer
+            ref={playerRef}
+            clipUrl={extractedClips[activePhrase.id].clipUrl}
+            onReady={() => setPlayerReady(true)}
+            onStateChange={handleStateChange}
+            loop={false} // parent manages looping
+          />
+        ) : (
+          <YouTubePlayer
+            ref={playerRef}
+            videoId={videoId}
+            onReady={() => setPlayerReady(true)}
+            onStateChange={handleStateChange}
+            onTitleReady={onTitleReady}
+          />
+        )}
 
         {/* Loop status overlay */}
         {activePhrase && (
@@ -454,8 +561,14 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
             onRate={handleRate}
             isQueued={queuedIds.has(activePhrase.id) || isQueued(activePhrase.id)}
             onAddToQueue={handleAddToQueue}
-            suggestedRating={lastAzureScores ? azureToSRS(lastAzureScores) : undefined}
-            azureComposite={lastAzureScores ? compositeScore(lastAzureScores) : undefined}
+            suggestedRating={lastAzureScores
+              ? combinedToSRS(lastAzureScores, prosodyScores?.overall)
+              : undefined
+            }
+            azureComposite={lastAzureScores
+              ? combinedComposite(lastAzureScores, prosodyScores?.overall)
+              : undefined
+            }
           />
 
           <div className="border-t border-gray-100 pt-3">
@@ -472,8 +585,70 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
                 setLoopState('playing')
               }}
               onScoreReady={setLastAzureScores}
+              onProsodyReady={(up) => {
+                setUserProsody(up)
+                if (nativeProfile) {
+                  setProsodyScores(compareProsody(nativeProfile, up))
+                }
+              }}
             />
           </div>
+
+          {/* Prosody comparison feedback (only for extracted clips) */}
+          {prosodyScores && nativeProfile && userProsody && (
+            <div className="border-t border-gray-100 pt-3">
+              <ProsodyFeedback
+                scores={prosodyScores}
+                nativeProfile={nativeProfile}
+                userProsody={userProsody}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Select mode controls ── */}
+      <div className="flex items-center gap-3 px-1">
+        <button
+          onClick={() => { setSelectMode(!selectMode); if (selectMode) clearPhraseSelection() }}
+          className={`
+            px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
+            ${selectMode ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+          `}
+        >
+          {selectMode ? 'Cancel selection' : 'Select phrases to extract'}
+        </button>
+
+        {selectMode && selectedPhraseIds.length > 0 && (
+          <button
+            onClick={handleExtract}
+            disabled={extractionStatus === 'extracting'}
+            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {extractionStatus === 'extracting'
+              ? 'Extracting...'
+              : `Extract ${selectedPhraseIds.length} clip${selectedPhraseIds.length > 1 ? 's' : ''}`
+            }
+          </button>
+        )}
+      </div>
+
+      {/* ── Extraction progress ── */}
+      {extractionStatus === 'extracting' && extractionProgress && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-600" />
+            </span>
+            <p className="text-sm text-purple-700">{extractionProgress}</p>
+          </div>
+        </div>
+      )}
+
+      {extractionStatus === 'error' && extractionProgress && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-red-700">{extractionProgress}</p>
         </div>
       )}
 
@@ -484,6 +659,10 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
         onPhraseClick={handlePhraseClick}
         loopState={loopState}
         onMerge={handleMerge}
+        selectMode={selectMode}
+        selectedIds={new Set(selectedPhraseIds)}
+        extractedIds={new Set(Object.keys(extractedClips))}
+        onToggleSelect={togglePhraseSelection}
       />
     </div>
   )

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Phrase, LoopState, SRSEntry, SRSRating } from '@/types'
+import { Phrase, LoopState, SRSEntry, SRSRating, ExtractedClip, ExtractionStatus } from '@/types'
 
 // ─── Practice phase types (stub — used fully in Task 6) ──────────────────────
 export type PracticePhase = 'listen' | 'shadow-no-text' | 'shadow-with-text' | 'assess' | 'idle'
@@ -66,6 +66,11 @@ interface AppState {
   dailySession: DailySession | null
   currentPhase: PracticePhase
 
+  // Extraction (prosody comparison)
+  extractedClips: Record<string, ExtractedClip>  // keyed by phraseId
+  extractionStatus: ExtractionStatus
+  selectedPhraseIds: string[]
+
   // Player actions
   setActivePhrase: (phrase: Phrase | null) => void
   setLoopState: (state: LoopState) => void
@@ -86,6 +91,14 @@ interface AppState {
   setDailySession: (session: DailySession | null) => void
   setCurrentPhase: (phase: PracticePhase) => void
   markPhraseCompleted: (phraseId: string) => void
+
+  // Extraction actions
+  setExtractedClips: (clips: Record<string, ExtractedClip>) => void
+  addExtractedClip: (clip: ExtractedClip) => void
+  setExtractionStatus: (status: ExtractionStatus) => void
+  togglePhraseSelection: (phraseId: string) => void
+  clearPhraseSelection: () => void
+  getClipForPhrase: (phraseId: string) => ExtractedClip | undefined
 }
 
 export const useAppStore = create<AppState>()(
@@ -104,6 +117,11 @@ export const useAppStore = create<AppState>()(
       scoreHistory: [],
       dailySession: null,
       currentPhase: 'idle' as PracticePhase,
+
+      // ── Extraction state ──
+      extractedClips: {},
+      extractionStatus: 'idle' as ExtractionStatus,
+      selectedPhraseIds: [],
 
       // ── Player actions ──
       setActivePhrase: (phrase) => set({ activePhrase: phrase, loopCount: 0 }),
@@ -149,6 +167,27 @@ export const useAppStore = create<AppState>()(
           },
         }
       }),
+
+      // ── Extraction actions ──
+      setExtractedClips: (clips) => set({ extractedClips: clips }),
+      addExtractedClip: (clip) => set((s) => ({
+        extractedClips: { ...s.extractedClips, [clip.phraseId]: clip },
+      })),
+      setExtractionStatus: (status) => set({ extractionStatus: status }),
+      togglePhraseSelection: (phraseId) => set((s) => {
+        const ids = s.selectedPhraseIds
+        if (ids.includes(phraseId)) {
+          return { selectedPhraseIds: ids.filter((id) => id !== phraseId) }
+        }
+        if (ids.length >= 15) return s // max 15 per batch
+        return { selectedPhraseIds: [...ids, phraseId] }
+      }),
+      clearPhraseSelection: () => set({ selectedPhraseIds: [] }),
+      getClipForPhrase: (phraseId: string): ExtractedClip | undefined => {
+        // Read directly from current state to avoid circular reference
+        const state = useAppStore.getState()
+        return state.extractedClips[phraseId]
+      },
     }),
     {
       name: 'shadowing-store',
@@ -159,6 +198,7 @@ export const useAppStore = create<AppState>()(
         loopsTarget: state.loopsTarget,
         savedVideos: state.savedVideos,
         scoreHistory: state.scoreHistory,
+        extractedClips: state.extractedClips,
       }),
       storage: {
         getItem: (name) => {

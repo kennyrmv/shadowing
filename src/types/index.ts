@@ -57,3 +57,48 @@ export type SRSRating = 1 | 3 | 5  // Hard | Good | Easy
 
 /** Loop state for the player */
 export type LoopState = 'idle' | 'playing' | 'paused'
+
+// ─── Extracted clip types (prosody comparison feature) ────────────────────────
+
+/** A video/audio clip extracted from YouTube for a specific phrase */
+export interface ExtractedClip {
+  phraseId: string
+  videoId: string
+  clipUrl: string           // presigned R2 URL for video segment
+  audioUrl: string          // presigned R2 URL for audio-only WAV
+  prosodyUrl: string        // presigned R2 URL for prosody profile JSON
+  extractedAt: string       // ISO timestamp
+  expiresAt: string         // presigned URL expiry (ISO)
+}
+
+/** Prosody profile extracted from the native speaker's audio */
+export interface ProsodyProfile {
+  phraseId: string
+  sampleRate: number                  // points per second (100 = 10ms hop)
+  pitchSemitones: (number | null)[]   // null = unvoiced frame
+  energy: number[]                    // 0-1 normalized RMS
+  onsets: number[]                    // syllable onset times (seconds)
+  durationSec: number
+  medianPitchHz: number
+  speakingRate: number                // syllables per second
+}
+
+/** User's prosody extracted client-side from their recording */
+export interface UserProsody {
+  pitchSemitones: (number | null)[]
+  energy: number[]
+  onsets: number[]
+  durationSec: number
+  medianPitchHz: number
+}
+
+/** Prosody comparison scores */
+export interface ProsodyScores {
+  intonation: number    // 0-100, pitch contour match
+  rhythm: number        // 0-100, onset timing match
+  stress: number        // 0-100, energy pattern match
+  overall: number       // weighted composite
+}
+
+/** Extraction job status */
+export type ExtractionStatus = 'idle' | 'extracting' | 'done' | 'error'

@@ -1,7 +1,7 @@
 FROM node:22-alpine
 
-# Install Python and pip
-RUN apk add --no-cache python3 py3-pip
+# Install Python, pip, ffmpeg, and build deps for parselmouth
+RUN apk add --no-cache python3 py3-pip ffmpeg
 
 WORKDIR /app
 

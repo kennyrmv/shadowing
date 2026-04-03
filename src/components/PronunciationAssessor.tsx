@@ -11,6 +11,8 @@ import { useState, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import type { ScoreRecord } from '@/store/useAppStore'
 import type { AzureScores } from '@/lib/autoRate'
+import { extractUserProsody } from '@/lib/pitchExtraction'
+import type { UserProsody } from '@/types'
 
 interface WordResult {
   word: string
@@ -35,6 +37,7 @@ interface Props {
   onAssessStart?: () => void
   onAssessDone?: () => void
   onScoreReady?: (scores: AzureScores) => void
+  onProsodyReady?: (prosody: UserProsody) => void
 }
 
 function scoreColor(score: number): string {
@@ -72,7 +75,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buf], { type: 'audio/wav' })
 }
 
-export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone, onScoreReady }: Props) {
+export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone, onScoreReady, onProsodyReady }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -157,6 +160,14 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
     const sampleRate = audioCtx?.sampleRate ?? 16000
     const wavBlob = encodeWav(combined, sampleRate)
     await audioCtx?.close()
+
+    // Extract user prosody in parallel with Azure call (runs in ~50ms)
+    try {
+      const userProsody = extractUserProsody(combined, sampleRate)
+      onProsodyReady?.(userProsody)
+    } catch {
+      // Prosody extraction is optional — don't block assessment
+    }
 
     // Send WAV to server proxy → Azure
     try {

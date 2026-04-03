@@ -21,6 +21,10 @@ interface Props {
   onPhraseClick: (phrase: Phrase) => void
   loopState: LoopState
   onMerge: (phraseId: string) => void
+  selectMode?: boolean
+  selectedIds?: Set<string>
+  extractedIds?: Set<string>
+  onToggleSelect?: (phraseId: string) => void
 }
 
 function formatTime(seconds: number): string {
@@ -29,7 +33,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loopState, onMerge }: Props) {
+export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loopState, onMerge, selectMode, selectedIds, extractedIds, onToggleSelect }: Props) {
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
@@ -87,16 +91,37 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
               >
                 <div className="group relative">
                   <button
-                    onClick={() => handleClick(phrase)}
+                    onClick={() => selectMode && onToggleSelect ? onToggleSelect(phrase.id) : handleClick(phrase)}
                     className={`
                       w-full text-left px-4 py-3 border-b border-gray-50
                       transition-colors duration-100 flex items-start gap-3
-                      ${isActive
+                      ${isActive && !selectMode
                         ? 'bg-blue-50 border-l-2 border-l-blue-500'
-                        : 'hover:bg-gray-50'
+                        : selectMode && selectedIds?.has(phrase.id)
+                          ? 'bg-purple-50 border-l-2 border-l-purple-500'
+                          : 'hover:bg-gray-50'
                       }
                     `}
                   >
+                    {/* Select checkbox or extracted badge */}
+                    {selectMode ? (
+                      <span className={`
+                        mt-0.5 w-5 h-5 shrink-0 rounded border-2 flex items-center justify-center text-xs
+                        ${selectedIds?.has(phrase.id)
+                          ? 'bg-purple-600 border-purple-600 text-white'
+                          : extractedIds?.has(phrase.id)
+                            ? 'bg-green-100 border-green-400 text-green-600'
+                            : 'border-gray-300'
+                        }
+                      `}>
+                        {selectedIds?.has(phrase.id) ? '✓' : extractedIds?.has(phrase.id) ? '✓' : ''}
+                      </span>
+                    ) : extractedIds?.has(phrase.id) ? (
+                      <span className="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs" title="Clip extracted">
+                        ✓
+                      </span>
+                    ) : null}
+
                     {/* Timestamp */}
                     <span className="text-xs font-mono text-gray-400 mt-0.5 w-10 shrink-0">
                       {formatTime(phrase.startTime)}
