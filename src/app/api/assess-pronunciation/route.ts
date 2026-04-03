@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     ReferenceText: referenceText,
     GradingSystem: 'HundredMark',
     Granularity: 'Word',
+    Dimension: 'Comprehensive',   // enables FluencyScore + CompletenessScore
     EnableMiscue: true,
   })).toString('base64')
 
