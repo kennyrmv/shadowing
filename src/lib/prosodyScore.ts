@@ -18,6 +18,21 @@ export function compareProsody(
   native: ProsodyProfile,
   user: UserProsody
 ): ProsodyScores {
+  // ── Silence detection ──
+  // If the user barely spoke, all scores should be 0.
+  const userVoicedFrames = user.pitchSemitones.filter((v) => v !== null).length
+  const userVoicedRatio = user.pitchSemitones.length > 0
+    ? userVoicedFrames / user.pitchSemitones.length
+    : 0
+  const userMeanEnergy = user.energy.length > 0
+    ? user.energy.reduce((a, b) => a + b, 0) / user.energy.length
+    : 0
+
+  // Less than 10% voiced frames or very low energy = silence/noise
+  if (userVoicedRatio < 0.1 || userMeanEnergy < 0.05) {
+    return { intonation: 0, rhythm: 0, stress: 0, overall: 0 }
+  }
+
   // 1. Intonation: DTW-align pitch curves, then Pearson correlation
   const pitchDtw = dtwAlign(native.pitchSemitones, user.pitchSemitones)
   const { aValues: nativePitch, bValues: userPitch } = getAlignedValues(
@@ -27,7 +42,7 @@ export function compareProsody(
   )
   const intonation = nativePitch.length >= 5
     ? correlationToScore(pearsonCorrelation(nativePitch, userPitch))
-    : 50 // not enough voiced frames to compare
+    : 0 // not enough voiced frames = bad
 
   // 2. Rhythm: normalized onset timing match
   const rhythm = compareOnsets(native.onsets, user.onsets, native.durationSec, user.durationSec)
@@ -44,7 +59,7 @@ export function compareProsody(
   )
   const stress = nativeEnergy.length >= 5
     ? correlationToScore(pearsonCorrelation(nativeEnergy, userEnergy))
-    : 50
+    : 0
 
   // Weighted composite: same philosophy as autoRate.ts
   const overall = Math.round(intonation * 0.4 + rhythm * 0.3 + stress * 0.3)
@@ -68,7 +83,7 @@ function compareOnsets(
   nativeDuration: number,
   userDuration: number
 ): number {
-  if (nativeOnsets.length < 2 || userOnsets.length < 2) return 50
+  if (nativeOnsets.length < 2 || userOnsets.length < 2) return 0
 
   // Normalize to [0, 1]
   const normalize = (onsets: number[], dur: number) =>
