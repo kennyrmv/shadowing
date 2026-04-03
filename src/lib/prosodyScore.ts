@@ -33,21 +33,28 @@ export function compareProsody(
     return { intonation: 0, rhythm: 0, stress: 0, overall: 0 }
   }
 
-  // 1. Intonation: DTW-align pitch curves, then Pearson correlation
+  // 1. Intonation: DTW-align pitch curves, correlation + distance penalty
   const pitchDtw = dtwAlign(native.pitchSemitones, user.pitchSemitones)
   const { aValues: nativePitch, bValues: userPitch } = getAlignedValues(
     native.pitchSemitones,
     user.pitchSemitones,
     pitchDtw.path
   )
-  const intonation = nativePitch.length >= 5
-    ? correlationToScore(pearsonCorrelation(nativePitch, userPitch))
-    : 0 // not enough voiced frames = bad
+  let intonation = 0
+  if (nativePitch.length >= 5) {
+    const corr = pearsonCorrelation(nativePitch, userPitch)
+    const corrScore = correlationToScore(corr)
+    // Penalize by mean absolute difference in semitones (DTW-aligned)
+    const meanDiff = meanAbsDiff(nativePitch, userPitch)
+    // 0 semitones diff = no penalty, 6+ semitones = heavy penalty
+    const diffPenalty = Math.max(0, 1 - meanDiff / 6)
+    intonation = corrScore * diffPenalty
+  }
 
   // 2. Rhythm: normalized onset timing match
   const rhythm = compareOnsets(native.onsets, user.onsets, native.durationSec, user.durationSec)
 
-  // 3. Stress: DTW-align energy curves, then Pearson correlation
+  // 3. Stress: DTW-align energy curves, correlation + variance check
   const energyDtw = dtwAlign(
     native.energy.map((v) => v as number | null),
     user.energy.map((v) => v as number | null)
@@ -57,9 +64,19 @@ export function compareProsody(
     user.energy.map((v) => v as number | null),
     energyDtw.path
   )
-  const stress = nativeEnergy.length >= 5
-    ? correlationToScore(pearsonCorrelation(nativeEnergy, userEnergy))
-    : 0
+  let stress = 0
+  if (nativeEnergy.length >= 5) {
+    const corr = pearsonCorrelation(nativeEnergy, userEnergy)
+    const corrScore = correlationToScore(corr)
+    // Penalize flat energy (no dynamic range = monotone delivery)
+    const userStdDev = stdDev(userEnergy)
+    const nativeStdDev = stdDev(nativeEnergy)
+    // If user's dynamic range is much less than native's, penalize
+    const dynamicPenalty = nativeStdDev > 0.01
+      ? Math.min(1, userStdDev / nativeStdDev)
+      : 1
+    stress = corrScore * dynamicPenalty
+  }
 
   // Weighted composite: same philosophy as autoRate.ts
   const overall = Math.round(intonation * 0.4 + rhythm * 0.3 + stress * 0.3)
@@ -136,15 +153,29 @@ function pearsonCorrelation(a: number[], b: number[]): number {
 
 /**
  * Map Pearson correlation (-1 to +1) to a 0-100 score.
- * Negative correlation (opposite intonation) gets low scores.
- * r=0.3 → ~50, r=0.7 → ~80, r=0.9 → ~95
+ * Stricter curve: requires high correlation for good scores.
+ * r=0 → 10, r=0.5 → 40, r=0.7 → 65, r=0.85 → 82, r=0.95 → 95
  */
 function correlationToScore(r: number): number {
-  // Clamp to [-1, 1]
   const clamped = Math.max(-1, Math.min(1, r))
-  // Map: -1→0, 0→30, 0.3→50, 0.7→80, 1→100
-  // Using a simple power curve
-  if (clamped <= 0) return Math.max(0, 30 + clamped * 30) // -1→0, 0→30
-  // Positive: 0→30, 1→100
-  return 30 + 70 * Math.pow(clamped, 0.7)
+  if (clamped <= 0) return Math.max(0, 10 + clamped * 10) // -1→0, 0→10
+  // Steeper curve: need r > 0.7 for a decent score
+  return 10 + 90 * Math.pow(clamped, 2)
+}
+
+/** Mean absolute difference between two aligned arrays */
+function meanAbsDiff(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length)
+  if (n === 0) return 0
+  let sum = 0
+  for (let i = 0; i < n; i++) sum += Math.abs(a[i] - b[i])
+  return sum / n
+}
+
+/** Standard deviation of an array */
+function stdDev(arr: number[]): number {
+  if (arr.length < 2) return 0
+  const mean = arr.reduce((a, b) => a + b, 0) / arr.length
+  const variance = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0) / arr.length
+  return Math.sqrt(variance)
 }
