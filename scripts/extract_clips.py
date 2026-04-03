@@ -36,17 +36,23 @@ def download_video(video_id: str, output_path: str) -> str:
 
 
 def extract_clip(input_path: str, output_path: str, start: float, duration: float):
-    """Extract a video clip segment using ffmpeg with stream copy (fast, no re-encoding)."""
+    """Extract a video clip segment with frame-accurate cutting.
+
+    Uses -ss before -i for fast seeking to the nearest keyframe,
+    then re-encodes for precise start/end points. For 5-15s clips
+    at 480p this takes ~2-3 seconds per clip.
+    """
     cmd = [
         "ffmpeg", "-y",
         "-ss", str(start),
-        "-t", str(duration),
         "-i", input_path,
-        "-c", "copy",
+        "-t", str(duration),
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
         "-movflags", "+faststart",  # optimize for streaming
         output_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg clip extraction failed: {result.stderr}")
 
@@ -93,9 +99,9 @@ def main():
         start = float(phrase["startTime"])
         duration = float(phrase["duration"])
 
-        # Add small padding (0.2s before, 0.3s after) for natural boundaries
-        padded_start = max(0, start - 0.2)
-        padded_duration = duration + 0.5
+        # Small padding after for natural boundary (speaker may trail off)
+        padded_start = start
+        padded_duration = duration + 0.15
 
         clip_path = os.path.join(output_dir, f"{phrase_id.replace(':', '_').replace('-', '_')}_clip.mp4")
         audio_path = os.path.join(output_dir, f"{phrase_id.replace(':', '_').replace('-', '_')}_audio.wav")
