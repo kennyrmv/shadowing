@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { getProgress, getLast30Days } from '@/lib/progress'
 import { useAppStore } from '@/store/useAppStore'
 import type { ScoreRecord } from '@/store/useAppStore'
+import { getWeakWords } from '@/lib/phonemeAnalysis'
 
 interface DayCell {
   date: string
@@ -129,6 +130,9 @@ export default function ProgressDashboard() {
     completeness: last30.length ? Math.round(last30.reduce((s, r) => s + r.completeness, 0) / last30.length) : null,
   }
 
+  // ── Weak words (Task 7) ──
+  const weakWords = getWeakWords(scoreHistory)
+
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-4">
       {/* ── Stats row ── */}
@@ -246,6 +250,65 @@ export default function ProgressDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Weak spots (Task 7) ── */}
+      {weakWords.length > 0 && (
+        <div className="border-t border-gray-50 pt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-400">Weak spots</p>
+            <p className="text-xs text-gray-300">{weakWords.length} word{weakWords.length !== 1 ? 's' : ''}</p>
+          </div>
+
+          <div className="space-y-2">
+            {weakWords.map((w) => (
+              <div key={w.word} className="flex items-center gap-3">
+                {/* Word */}
+                <span className="font-mono text-sm font-medium text-gray-800 w-24 shrink-0 truncate">
+                  {w.word}
+                </span>
+
+                {/* Accuracy bar */}
+                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      w.avgAccuracy < 50 ? 'bg-red-400' : 'bg-yellow-400'
+                    }`}
+                    style={{ width: `${w.avgAccuracy}%` }}
+                  />
+                </div>
+
+                {/* Score */}
+                <span className={`text-xs font-semibold w-7 text-right tabular-nums ${
+                  w.avgAccuracy < 50 ? 'text-red-500' : 'text-yellow-500'
+                }`}>
+                  {w.avgAccuracy}
+                </span>
+
+                {/* Trend */}
+                <span
+                  className={`text-xs w-4 text-center ${
+                    w.trend === 'improving' ? 'text-green-500' :
+                    w.trend === 'declining' ? 'text-red-400' :
+                    'text-gray-300'
+                  }`}
+                  title={w.trend}
+                >
+                  {w.trend === 'improving' ? '↑' : w.trend === 'declining' ? '↓' : '→'}
+                </span>
+
+                {/* Attempts */}
+                <span className="text-xs text-gray-300 w-6 text-right tabular-nums">
+                  {w.attempts}×
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-gray-300">
+            Words with accuracy below 75 · min 3 attempts · ↑ improving ↓ declining
+          </p>
         </div>
       )}
     </div>
