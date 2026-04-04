@@ -17,10 +17,10 @@ interface DayCell {
 }
 
 function heatColor(count: number): string {
-  if (count === 0) return 'bg-gray-100'
-  if (count < 5)  return 'bg-green-200'
-  if (count < 15) return 'bg-green-400'
-  return 'bg-green-600'
+  if (count === 0) return 'bg-surface'
+  if (count < 5)  return 'bg-success-light'
+  if (count < 15) return 'bg-success/60'
+  return 'bg-success'
 }
 
 function shortDate(dateStr: string): string {
@@ -134,35 +134,35 @@ export default function ProgressDashboard() {
   const weakWords = getWeakWords(scoreHistory)
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-4">
+    <div className="bg-bg border border-border rounded-[12px] p-5 space-y-4">
       {/* ── Stats row ── */}
       <div className="flex items-center gap-6">
         <div className="text-center">
-          <p className="text-2xl font-bold text-gray-900">
+          <p className="text-2xl font-bold font-display text-text">
             {streak > 0 ? `${streak}` : '—'}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">day streak</p>
+          <p className="text-xs text-text-muted mt-0.5">day streak</p>
         </div>
-        <div className="w-px h-8 bg-gray-100" />
+        <div className="w-px h-8 bg-surface" />
         <div className="text-center">
-          <p className="text-2xl font-bold text-gray-900">{todayCount}</p>
-          <p className="text-xs text-gray-400 mt-0.5">today</p>
+          <p className="text-2xl font-bold font-display text-text">{todayCount}</p>
+          <p className="text-xs text-text-muted mt-0.5">today</p>
         </div>
-        <div className="w-px h-8 bg-gray-100" />
+        <div className="w-px h-8 bg-surface" />
         <div className="text-center">
-          <p className="text-2xl font-bold text-gray-900">{totalPhrases}</p>
-          <p className="text-xs text-gray-400 mt-0.5">last 30 days</p>
+          <p className="text-2xl font-bold font-display text-text">{totalPhrases}</p>
+          <p className="text-xs text-text-muted mt-0.5">last 30 days</p>
         </div>
-        <div className="w-px h-8 bg-gray-100" />
+        <div className="w-px h-8 bg-surface" />
         <div className="text-center">
-          <p className="text-2xl font-bold text-gray-900">{activeDays}</p>
-          <p className="text-xs text-gray-400 mt-0.5">active days</p>
+          <p className="text-2xl font-bold font-display text-text">{activeDays}</p>
+          <p className="text-xs text-text-muted mt-0.5">active days</p>
         </div>
       </div>
 
       {/* ── 30-day heatmap ── */}
       <div>
-        <p className="text-xs text-gray-400 mb-2">Last 30 days</p>
+        <p className="text-xs text-text-muted mb-2">Last 30 days</p>
         <div className="flex gap-1 flex-wrap">
           {days.map((day) => (
             <div
@@ -173,18 +173,18 @@ export default function ProgressDashboard() {
           ))}
         </div>
         <div className="flex items-center gap-1.5 mt-2">
-          <span className="text-xs text-gray-300">Less</span>
-          {['bg-gray-100', 'bg-green-200', 'bg-green-400', 'bg-green-600'].map((c) => (
+          <span className="text-xs text-text-muted">Less</span>
+          {['bg-surface', 'bg-success-light', 'bg-success/60', 'bg-success'].map((c) => (
             <div key={c} className={`w-3 h-3 rounded-sm ${c}`} />
           ))}
-          <span className="text-xs text-gray-300">More</span>
+          <span className="text-xs text-text-muted">More</span>
         </div>
       </div>
 
       {/* ── Score trend (only when there's enough data) ── */}
       {scoreHistory.length >= 3 && (
-        <div className="border-t border-gray-50 pt-4 space-y-3">
-          <p className="text-xs text-gray-400">Score trend (8 weeks)</p>
+        <div className="border-t border-border pt-4 space-y-3">
+          <p className="text-xs text-text-muted">Score trend (8 weeks)</p>
 
           {/* SVG line chart — pronunciation score per week */}
           <div style={{ height: `${CHART_H}px` }} className="w-full">
@@ -198,7 +198,7 @@ export default function ProgressDashboard() {
                 <line
                   key={y}
                   x1={0} y1={yVal(y)} x2={CHART_W} y2={yVal(y)}
-                  stroke="#f3f4f6" strokeWidth="1"
+                  stroke="#E5E7EB" strokeWidth="1"
                 />
               ))}
               {/* Line segments */}
@@ -207,7 +207,7 @@ export default function ProgressDashboard() {
                   key={i}
                   points={pts}
                   fill="none"
-                  stroke="#3b82f6"
+                  stroke="#0EA5E9"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -221,7 +221,7 @@ export default function ProgressDashboard() {
                     cx={(i * xStep).toFixed(1)}
                     cy={yVal(v).toFixed(1)}
                     r="2.5"
-                    fill="#3b82f6"
+                    fill="#0EA5E9"
                   />
                 ) : null
               )}
@@ -230,23 +230,23 @@ export default function ProgressDashboard() {
 
           {/* X axis labels */}
           <div className="flex justify-between px-0.5">
-            <span className="text-xs text-gray-300">{weeklyData[0].label}</span>
-            <span className="text-xs text-gray-400 font-medium">Pronunciation</span>
-            <span className="text-xs text-gray-300">{weeklyData[7].label}</span>
+            <span className="text-xs text-text-muted">{weeklyData[0].label}</span>
+            <span className="text-xs text-text-muted font-medium">Pronunciation</span>
+            <span className="text-xs text-text-muted">{weeklyData[7].label}</span>
           </div>
 
           {/* 30-day dimension averages */}
           <div className="grid grid-cols-3 gap-2 text-center">
             {([
-              { label: 'Accuracy',   value: avg30.accuracy,     color: 'text-green-600' },
-              { label: 'Fluency',    value: avg30.fluency,      color: 'text-yellow-500' },
-              { label: 'Complete',   value: avg30.completeness, color: 'text-blue-500' },
+              { label: 'Accuracy',   value: avg30.accuracy,     color: 'text-success' },
+              { label: 'Fluency',    value: avg30.fluency,      color: 'text-warning' },
+              { label: 'Complete',   value: avg30.completeness, color: 'text-primary' },
             ] as const).map(({ label, value, color }) => (
-              <div key={label} className="bg-gray-50 rounded-lg py-2">
-                <p className={`text-base font-bold ${value !== null ? color : 'text-gray-300'}`}>
+              <div key={label} className="bg-surface rounded-[8px] py-2">
+                <p className={`text-base font-bold ${value !== null ? color : 'text-text-muted'}`}>
                   {value !== null ? value : '—'}
                 </p>
-                <p className="text-xs text-gray-400">{label}</p>
+                <p className="text-xs text-text-muted">{label}</p>
               </div>
             ))}
           </div>
@@ -255,25 +255,25 @@ export default function ProgressDashboard() {
 
       {/* ── Weak spots (Task 7) ── */}
       {weakWords.length > 0 && (
-        <div className="border-t border-gray-50 pt-4 space-y-3">
+        <div className="border-t border-border pt-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">Weak spots</p>
-            <p className="text-xs text-gray-300">{weakWords.length} word{weakWords.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-text-muted">Weak spots</p>
+            <p className="text-xs text-text-muted">{weakWords.length} word{weakWords.length !== 1 ? 's' : ''}</p>
           </div>
 
           <div className="space-y-2">
             {weakWords.map((w) => (
               <div key={w.word} className="flex items-center gap-3">
                 {/* Word */}
-                <span className="font-mono text-sm font-medium text-gray-800 w-24 shrink-0 truncate">
+                <span className="font-mono text-sm font-medium text-text w-24 shrink-0 truncate">
                   {w.word}
                 </span>
 
                 {/* Accuracy bar */}
-                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-surface rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      w.avgAccuracy < 50 ? 'bg-red-400' : 'bg-yellow-400'
+                      w.avgAccuracy < 50 ? 'bg-error' : 'bg-warning'
                     }`}
                     style={{ width: `${w.avgAccuracy}%` }}
                   />
@@ -281,7 +281,7 @@ export default function ProgressDashboard() {
 
                 {/* Score */}
                 <span className={`text-xs font-semibold w-7 text-right tabular-nums ${
-                  w.avgAccuracy < 50 ? 'text-red-500' : 'text-yellow-500'
+                  w.avgAccuracy < 50 ? 'text-error' : 'text-warning'
                 }`}>
                   {w.avgAccuracy}
                 </span>
@@ -289,9 +289,9 @@ export default function ProgressDashboard() {
                 {/* Trend */}
                 <span
                   className={`text-xs w-4 text-center ${
-                    w.trend === 'improving' ? 'text-green-500' :
-                    w.trend === 'declining' ? 'text-red-400' :
-                    'text-gray-300'
+                    w.trend === 'improving' ? 'text-success' :
+                    w.trend === 'declining' ? 'text-error' :
+                    'text-text-muted'
                   }`}
                   title={w.trend}
                 >
@@ -299,14 +299,14 @@ export default function ProgressDashboard() {
                 </span>
 
                 {/* Attempts */}
-                <span className="text-xs text-gray-300 w-6 text-right tabular-nums">
+                <span className="text-xs text-text-muted w-6 text-right tabular-nums">
                   {w.attempts}×
                 </span>
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-gray-300">
+          <p className="text-xs text-text-muted">
             Words with accuracy below 75 · min 3 attempts · ↑ improving ↓ declining
           </p>
         </div>

@@ -14,13 +14,13 @@ import type { AzureScores } from '@/lib/autoRate'
 import { extractUserProsody } from '@/lib/pitchExtraction'
 import type { UserProsody } from '@/types'
 
-interface WordResult {
+export interface WordResult {
   word: string
   accuracyScore: number
   errorType: 'None' | 'Mispronunciation' | 'Omission' | 'Insertion' | string
 }
 
-interface AssessmentResult {
+export interface AssessmentResult {
   pronunciationScore: number
   accuracyScore: number
   fluencyScore: number
@@ -38,18 +38,20 @@ interface Props {
   onAssessDone?: () => void
   onScoreReady?: (scores: AzureScores) => void
   onProsodyReady?: (prosody: UserProsody) => void
+  onFullResult?: (result: AssessmentResult) => void
+  hideResults?: boolean
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return 'text-green-600'
-  if (score >= 50) return 'text-yellow-500'
-  return 'text-red-500'
+  if (score >= 80) return 'text-success'
+  if (score >= 50) return 'text-warning'
+  return 'text-error'
 }
 
 function scoreBg(score: number): string {
-  if (score >= 80) return 'bg-green-50 border-green-200 text-green-700'
-  if (score >= 50) return 'bg-yellow-50 border-yellow-200 text-yellow-700'
-  return 'bg-red-50 border-red-200 text-red-600'
+  if (score >= 80) return 'bg-success-light border-success/30 text-success'
+  if (score >= 50) return 'bg-warning-light border-warning/30 text-warning'
+  return 'bg-error-light border-error/30 text-error'
 }
 
 /** Encode Float32 PCM samples as a WAV blob (16-bit mono) */
@@ -75,7 +77,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buf], { type: 'audio/wav' })
 }
 
-export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone, onScoreReady, onProsodyReady }: Props) {
+export default function PronunciationAssessor({ phraseText, phraseId, videoId, onAssessStart, onAssessDone, onScoreReady, onProsodyReady, onFullResult, hideResults }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [result, setResult] = useState<AssessmentResult | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -229,8 +231,10 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
 
       onScoreReady?.({ accuracy, fluency, completeness })
 
-      setResult({ pronunciationScore: pronunciation, accuracyScore: accuracy, fluencyScore: fluency, completenessScore: completeness, words })
+      const fullResult = { pronunciationScore: pronunciation, accuracyScore: accuracy, fluencyScore: fluency, completenessScore: completeness, words }
+      setResult(fullResult)
       setStatus('done')
+      onFullResult?.(fullResult)
     } catch (err) {
       setErrorMsg(`Assessment failed: ${err instanceof Error ? err.message : err}`)
       setStatus('error')
@@ -245,7 +249,7 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
       {(status === 'idle' || status === 'error' || status === 'done') && (
         <button
           onPointerDown={startRecording}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 active:bg-purple-800 transition-colors select-none"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-[8px] text-sm font-medium hover:bg-primary-dark active:bg-primary-dark transition-colors select-none"
         >
           <span>🎤</span>
           {status === 'done' ? 'Assess again — hold & speak' : 'Hold & speak the phrase'}
@@ -255,17 +259,17 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
       {/* Recording */}
       {status === 'recording' && (
         <div className="space-y-2">
-          <div className="flex items-center gap-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-3 px-4 py-2 bg-error-light border border-error/30 rounded-[8px]">
             <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-error" />
             </span>
-            <span className="text-sm text-red-700 font-medium">Recording... {recordingSec}s</span>
+            <span className="text-sm text-error font-medium">Recording... {recordingSec}s</span>
           </div>
           <button
             onPointerUp={stopAndAssess}
             onClick={stopAndAssess}
-            className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-medium"
+            className="w-full py-2 bg-error text-white rounded-[8px] text-sm font-medium"
           >
             Done — tap to analyze
           </button>
@@ -274,32 +278,32 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
 
       {/* Processing */}
       {status === 'processing' && (
-        <div className="text-sm text-gray-400 px-1">Analyzing your pronunciation...</div>
+        <div className="text-sm text-text-muted px-1">Analyzing your pronunciation...</div>
       )}
 
       {/* Error */}
       {status === 'error' && (
-        <p className="text-xs text-red-500 px-1">{errorMsg}</p>
+        <p className="text-xs text-error px-1">{errorMsg}</p>
       )}
 
-      {/* Results */}
-      {status === 'done' && result && (
+      {/* Results (hidden when parent renders them in sequential flow) */}
+      {status === 'done' && result && !hideResults && (
         <div className="space-y-3">
-          <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${scoreBg(result.pronunciationScore)}`}>
+          <div className={`flex items-center justify-between px-4 py-3 rounded-[8px] border ${scoreBg(result.pronunciationScore)}`}>
             <span className="text-sm font-medium">Pronunciation score</span>
             <span className="text-2xl font-bold">{result.pronunciationScore}</span>
           </div>
 
-          <div className="bg-gray-50 rounded-lg px-4 py-3">
-            <p className="text-xs text-gray-400 mb-2">Word accuracy</p>
+          <div className="bg-surface rounded-[8px] px-4 py-3">
+            <p className="text-xs text-text-muted mb-2">Word accuracy</p>
             <div className="flex flex-wrap gap-1.5">
               {result.words.map((w, i) => (
                 <span
                   key={i}
                   title={`${w.accuracyScore}/100`}
                   className={`text-sm font-medium px-1.5 py-0.5 rounded ${
-                    w.errorType === 'Omission' ? 'line-through text-gray-300' :
-                    w.errorType === 'Insertion' ? 'text-gray-400 italic' :
+                    w.errorType === 'Omission' ? 'line-through text-text-muted' :
+                    w.errorType === 'Insertion' ? 'text-text-muted italic' :
                     scoreColor(w.accuracyScore)
                   }`}
                 >
@@ -315,9 +319,9 @@ export default function PronunciationAssessor({ phraseText, phraseId, videoId, o
               { label: 'Fluency', value: result.fluencyScore },
               { label: 'Complete', value: result.completenessScore },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-gray-50 rounded-lg py-2">
+              <div key={label} className="bg-surface rounded-[8px] py-2">
                 <p className={`text-lg font-bold ${scoreColor(value)}`}>{value}</p>
-                <p className="text-xs text-gray-400">{label}</p>
+                <p className="text-xs text-text-muted">{label}</p>
               </div>
             ))}
           </div>

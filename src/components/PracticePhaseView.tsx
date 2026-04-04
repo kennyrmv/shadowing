@@ -63,9 +63,9 @@ const PHASE_CONFIG: Record<Phase, {
 // ─── SRS rating buttons ───────────────────────────────────────────────────────
 
 const RATINGS = [
-  { rating: 1 as SRSRating, label: 'Hard', ghost: 'bg-red-100 text-red-700 hover:bg-red-200',          active: 'bg-red-500 text-white' },
-  { rating: 3 as SRSRating, label: 'Good', ghost: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200', active: 'bg-yellow-500 text-white' },
-  { rating: 5 as SRSRating, label: 'Easy', ghost: 'bg-green-100 text-green-700 hover:bg-green-200',    active: 'bg-green-500 text-white' },
+  { rating: 1 as SRSRating, label: 'Hard', ghost: 'bg-error-light text-error hover:bg-red-200',          active: 'bg-error text-white' },
+  { rating: 3 as SRSRating, label: 'Good', ghost: 'bg-warning-light text-warning hover:bg-yellow-200', active: 'bg-warning text-white' },
+  { rating: 5 as SRSRating, label: 'Easy', ghost: 'bg-success-light text-success hover:bg-green-200',    active: 'bg-success text-white' },
 ] as const
 
 const RATING_LABELS: Record<SRSRating, string> = { 1: 'Hard', 3: 'Good', 5: 'Easy' }
@@ -175,10 +175,10 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+    <div className="bg-bg border border-border rounded-[12px] overflow-hidden">
 
       {/* ── Phase indicator bar ── */}
-      <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
+      <div className="px-5 py-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           {visiblePhases.map((p, i) => {
             const absIdx = startIdx + i
@@ -188,16 +188,16 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
               <div
                 key={p}
                 className={`w-2 h-2 rounded-full transition-colors duration-300 ${
-                  done ? 'bg-blue-300' : active ? 'bg-blue-600' : 'bg-gray-200'
+                  done ? 'bg-primary/40' : active ? 'bg-primary' : 'bg-border'
                 }`}
               />
             )
           })}
-          <span className="text-xs font-medium text-gray-700 ml-1">{config.label}</span>
+          <span className="text-xs font-medium text-text-secondary ml-1">{config.label}</span>
         </div>
         <button
           onClick={onSkip}
-          className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
+          className="text-xs text-text-muted hover:text-text-secondary transition-colors"
         >
           Skip phrase
         </button>
@@ -215,12 +215,12 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
         )}
 
         {/* ── Sub-label ── */}
-        <p className="text-xs text-gray-400">{config.subLabel}</p>
+        <p className="text-xs text-text-muted">{config.subLabel}</p>
 
         {/* ── Phrase text — CSS opacity fade, stays in DOM ── */}
         <p
           aria-hidden={!config.showText}
-          className={`text-gray-800 text-lg leading-relaxed transition-opacity duration-500 select-none ${
+          className={`text-text text-lg leading-relaxed transition-opacity duration-500 select-none ${
             config.showText ? 'opacity-100' : 'opacity-0'
           }`}
         >
@@ -234,11 +234,11 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
               <div
                 key={i}
                 className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                  i < loopCount ? 'bg-blue-500' : 'bg-gray-200'
+                  i < loopCount ? 'bg-primary' : 'bg-border'
                 }`}
               />
             ))}
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-text-muted">
               {loopsReady ? 'Ready!' : `${Math.min(loopCount, config.targetLoops)}/${config.targetLoops} loops`}
             </span>
           </div>
@@ -250,14 +250,14 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
             {loopsReady ? (
               <button
                 onClick={advancePhase}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+                className="flex-1 py-2.5 bg-primary text-white rounded-[12px] text-sm font-semibold hover:bg-primary-dark transition-colors"
               >
                 Next phase →
               </button>
             ) : (
               <button
                 onClick={skipToAssess}
-                className="flex-1 py-2.5 bg-gray-100 text-gray-500 rounded-xl text-sm hover:bg-gray-200 transition-colors"
+                className="flex-1 py-2.5 bg-surface text-text-secondary rounded-[12px] text-sm hover:bg-surface transition-colors"
               >
                 Skip to assess →
               </button>
@@ -276,22 +276,22 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
             />
 
             {/* SRS rating */}
-            <div className="border-t border-gray-50 pt-3 space-y-2">
+            <div className="border-t border-border pt-3 space-y-2">
               {suggestedRating !== undefined ? (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-text-secondary">
                   Score: {composite} →{' '}
                   <span className="font-semibold">{RATING_LABELS[suggestedRating]}</span>
-                  <span className="text-gray-300 ml-1">(tap to override)</span>
+                  <span className="text-text-muted ml-1">(tap to override)</span>
                 </p>
               ) : (
-                <p className="text-xs text-gray-500">How did it feel?</p>
+                <p className="text-xs text-text-secondary">How did it feel?</p>
               )}
               <div className="flex gap-2">
                 {RATINGS.map(({ rating, label, ghost, active }) => (
                   <button
                     key={rating}
                     onClick={() => onComplete(rating, lastAzureScores ?? undefined)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    className={`flex-1 py-2.5 rounded-[12px] text-sm font-medium transition-colors ${
                       suggestedRating === rating ? active : ghost
                     }`}
                   >
@@ -299,7 +299,7 @@ export default function PracticePhaseView({ item, onComplete, onSkip }: Props) {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-300 text-center">
+              <p className="text-xs text-text-muted text-center">
                 This updates your spaced repetition schedule
               </p>
             </div>

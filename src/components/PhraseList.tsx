@@ -50,7 +50,7 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
 
   if (!phrases.length) {
     return (
-      <div className="text-center py-12 text-gray-400">
+      <div className="text-center py-12 text-text-muted">
         No phrases yet. Paste a YouTube URL above.
       </div>
     )
@@ -58,14 +58,14 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
 
   return (
     <div>
-      <p className="text-sm text-gray-400 mb-2 px-1">
+      <p className="text-sm text-text-muted mb-2 px-1">
         {phrases.length} phrases — click any to start looping
       </p>
 
       {/* Scrollable container — TanStack Virtual needs a fixed height */}
       <div
         ref={parentRef}
-        className="h-[420px] overflow-y-auto rounded-xl border border-gray-100 bg-white"
+        className="h-[420px] overflow-y-auto rounded-[12px] border border-border bg-bg"
       >
         {/* Total height spacer so the scrollbar is proportional */}
         <div
@@ -93,13 +93,13 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
                   <button
                     onClick={() => selectMode && onToggleSelect ? onToggleSelect(phrase.id) : handleClick(phrase)}
                     className={`
-                      w-full text-left px-4 py-3 border-b border-gray-50
+                      w-full text-left px-4 py-3 border-b border-surface
                       transition-colors duration-100 flex items-start gap-3
                       ${isActive && !selectMode
-                        ? 'bg-blue-50 border-l-2 border-l-blue-500'
+                        ? 'bg-primary-light border-l-2 border-l-primary'
                         : selectMode && selectedIds?.has(phrase.id)
-                          ? 'bg-purple-50 border-l-2 border-l-purple-500'
-                          : 'hover:bg-gray-50'
+                          ? 'bg-primary-light border-l-2 border-l-primary'
+                          : 'hover:bg-surface'
                       }
                     `}
                   >
@@ -108,29 +108,29 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
                       <span className={`
                         mt-0.5 w-5 h-5 shrink-0 rounded border-2 flex items-center justify-center text-xs
                         ${selectedIds?.has(phrase.id)
-                          ? 'bg-purple-600 border-purple-600 text-white'
+                          ? 'bg-primary border-primary text-white'
                           : extractedIds?.has(phrase.id)
-                            ? 'bg-green-100 border-green-400 text-green-600'
-                            : 'border-gray-300'
+                            ? 'bg-success-light border-success/40 text-success'
+                            : 'border-text-muted'
                         }
                       `}>
                         {selectedIds?.has(phrase.id) ? '✓' : extractedIds?.has(phrase.id) ? '✓' : ''}
                       </span>
                     ) : extractedIds?.has(phrase.id) ? (
-                      <span className="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs" title="Clip extracted">
+                      <span className="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-success-light text-success flex items-center justify-center text-xs" title="Clip extracted">
                         ✓
                       </span>
                     ) : null}
 
                     {/* Timestamp */}
-                    <span className="text-xs font-mono text-gray-400 mt-0.5 w-10 shrink-0">
+                    <span className="text-xs font-mono text-text-muted mt-0.5 w-10 shrink-0">
                       {formatTime(phrase.startTime)}
                     </span>
 
                     {/* Phrase text */}
                     <span className={`
                       text-sm leading-snug flex-1
-                      ${isActive ? 'text-blue-700 font-medium' : 'text-gray-700'}
+                      ${isActive ? 'text-primary font-medium' : 'text-text-secondary'}
                     `}>
                       {phrase.text}
                     </span>
@@ -140,21 +140,21 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
                       {phrase.difficulty && (
                         <span className={`
                           text-xs px-1.5 py-0.5 rounded font-medium
-                          ${phrase.difficulty.overall === 'easy' ? 'bg-green-100 text-green-600' : ''}
-                          ${phrase.difficulty.overall === 'medium' ? 'bg-yellow-100 text-yellow-600' : ''}
-                          ${phrase.difficulty.overall === 'hard' ? 'bg-red-100 text-red-600' : ''}
+                          ${phrase.difficulty.overall === 'easy' ? 'bg-success-light text-success' : ''}
+                          ${phrase.difficulty.overall === 'medium' ? 'bg-warning-light text-warning' : ''}
+                          ${phrase.difficulty.overall === 'hard' ? 'bg-error-light text-error' : ''}
                         `}>
                           {phrase.difficulty.overall}
                         </span>
                       )}
-                      <span className="text-xs text-gray-300 font-mono">
+                      <span className="text-xs text-text-muted font-mono">
                         {phrase.duration.toFixed(1)}s
                       </span>
                       {isPlaying && (
-                        <span className="text-xs text-green-500">⟳</span>
+                        <span className="text-xs text-success">⟳</span>
                       )}
                       {isActive && loopState === 'paused' && (
-                        <span className="text-xs text-gray-400">⏸</span>
+                        <span className="text-xs text-text-muted">⏸</span>
                       )}
                     </div>
                   </button>
@@ -167,8 +167,8 @@ export default function PhraseList({ phrases, activePhraseId, onPhraseClick, loo
                       className="
                         absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2
                         opacity-0 group-hover:opacity-100 transition-opacity z-10
-                        bg-white border border-gray-200 rounded-full px-2 py-0.5
-                        text-xs text-gray-400 hover:text-blue-500 hover:border-blue-300
+                        bg-bg border border-border rounded-full px-2 py-0.5
+                        text-xs text-text-muted hover:text-primary hover:border-primary/30
                         leading-none shadow-sm
                       "
                     >

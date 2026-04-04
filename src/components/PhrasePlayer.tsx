@@ -31,6 +31,7 @@ import { addToQueue, ratePhrase, isQueued, exportData } from '@/lib/srs'
 import { recordPhraseSession } from '@/lib/progress'
 import { useAppStore } from '@/store/useAppStore'
 import { azureToSRS, compositeScore, combinedToSRS, combinedComposite } from '@/lib/autoRate'
+import type { AssessmentResult } from './PronunciationAssessor'
 import { compareProsody } from '@/lib/prosodyScore'
 import type { AzureScores } from '@/lib/autoRate'
 
@@ -41,9 +42,9 @@ interface Props {
 }
 
 const DIFFICULTY_COLORS = {
-  easy: 'bg-green-100 text-green-700',
-  medium: 'bg-yellow-100 text-yellow-700',
-  hard: 'bg-red-100 text-red-700',
+  easy: 'bg-success-light text-success',
+  medium: 'bg-warning-light text-warning',
+  hard: 'bg-error-light text-error',
 }
 
 const LOOP_GAP_MS = 500  // visual pause between loops
@@ -98,6 +99,10 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const [nativeProfile, setNativeProfile] = useState<ProsodyProfile | null>(null)
   const [userProsody, setUserProsody] = useState<UserProsody | null>(null)
   const [prosodyScores, setProsodyScores] = useState<ProsodyScores | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [focusedMode, setFocusedMode] = useState(false)
+  const [practiceStep, setPracticeStep] = useState<'looping' | 'assessing' | 'results' | 'rating'>('looping')
+  const [lastFullResult, setLastFullResult] = useState<AssessmentResult | null>(null)
 
   // Score all phrases once (pure function, useMemo so it doesn't re-run on every render)
   const scoredPhrases = useMemo(() => scorePhrases(phrases), [phrases])
@@ -154,12 +159,14 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const loopCountRef = useRef(0)  // readable inside setInterval
   const loopEndFiredRef = useRef(false)  // debounce: one increment per loop end
 
-  // Reset scores when phrase changes + load native prosody profile from store
+  // Reset scores and practice step when phrase changes + load native prosody profile from store
   useEffect(() => {
     setLastAzureScores(null)
     setProsodyScores(null)
     setUserProsody(null)
     setNativeProfile(null)
+    setPracticeStep('looping')
+    setLastFullResult(null)
 
     if (!activePhrase) return
     const clip = extractedClips[activePhrase.id]
@@ -345,6 +352,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
           setExtractionProgress('')
           clearPhraseSelection()
           setSelectMode(false)
+          setFocusedMode(true)
         } else if (statusData.status === 'error') {
           throw new Error(statusData.error || 'Extraction failed')
         } else {
@@ -399,10 +407,10 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
             <div className={`
               px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm
               ${isRestarting
-                ? 'bg-yellow-500/80 text-white'
+                ? 'bg-warning/80 text-white'
                 : loopState === 'playing'
-                  ? 'bg-green-500/80 text-white'
-                  : 'bg-gray-700/80 text-gray-200'
+                  ? 'bg-success/80 text-white'
+                  : 'bg-text/80 text-text-muted'
               }
             `}>
               {isRestarting
@@ -418,106 +426,112 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
         )}
       </div>
 
-      {/* ── Start from ── */}
-      <div className="flex items-center gap-3 px-1">
-        <span className="text-sm text-gray-500 w-16 shrink-0">Start from</span>
-        <input
-          type="text"
-          placeholder="e.g. 2:00"
-          value={startFromInput}
-          onChange={(e) => setStartFromInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') setStartFromSec(parseTime(startFromInput))
-          }}
-          className="w-20 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-400"
-        />
-        <button
-          onClick={() => setStartFromSec(parseTime(startFromInput))}
-          className="px-3 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+      {/* ── Video settings (collapsible) ── */}
+      <button
+        onClick={() => setShowSettings(!showSettings)}
+        className="flex items-center gap-2 w-full px-3 py-2 bg-surface rounded-[8px] text-sm text-text-secondary hover:text-text transition-colors"
+      >
+        <span>Video settings</span>
+        <svg
+          className={`w-3.5 h-3.5 transition-transform duration-200 ${showSettings ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
         >
-          Skip
-        </button>
-        {startFromSec > 0 && (
-          <button
-            onClick={() => { setStartFromInput(''); setStartFromSec(0) }}
-            className="text-xs text-gray-400 hover:text-gray-600"
-          >
-            Clear
-          </button>
-        )}
-      </div>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
-      {/* ── Speed control ── */}
-      <div className="flex items-center gap-3 px-1">
-        <span className="text-sm text-gray-500 w-16 shrink-0">Speed</span>
-        <div className="flex gap-2">
-          {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+      {showSettings && (
+        <div className="space-y-3">
+          {/* Start from */}
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-sm text-text-secondary w-16 shrink-0">Start from</span>
+            <input
+              type="text"
+              placeholder="e.g. 2:00"
+              value={startFromInput}
+              onChange={(e) => setStartFromInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setStartFromSec(parseTime(startFromInput))
+              }}
+              className="w-20 px-2 py-1 text-sm border border-border rounded focus:outline-none focus:border-primary"
+            />
             <button
-              key={rate}
-              onClick={() => handleRateChange(rate)}
-              className={`
-                px-2.5 py-1 rounded text-xs font-mono transition-colors
-                ${playbackRate === rate
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }
-              `}
+              onClick={() => setStartFromSec(parseTime(startFromInput))}
+              className="px-3 py-1 text-xs bg-surface text-text-secondary rounded hover:bg-gray-200"
             >
-              {rate}×
+              Skip
             </button>
-          ))}
-        </div>
-      </div>
+            {startFromSec > 0 && (
+              <button
+                onClick={() => { setStartFromInput(''); setStartFromSec(0) }}
+                className="text-xs text-text-muted hover:text-text-secondary"
+              >
+                Clear
+              </button>
+            )}
+          </div>
 
-      {/* ── Drill mode ── */}
-      <div className="flex items-center gap-3 px-1">
-        <span className="text-sm text-gray-500 w-16 shrink-0">Drill</span>
-        <button
-          onClick={() => setDrillMode(!drillMode)}
-          className={`
-            px-3 py-1 rounded text-xs font-medium transition-colors
-            ${drillMode ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
-          `}
-        >
-          {drillMode ? 'On' : 'Off'}
-        </button>
-        {drillMode && (
-          <>
-            <span className="text-xs text-gray-400">loops per phrase</span>
-            <div className="flex gap-1">
-              {[1, 2, 3, 5, 10].map((n) => (
+          {/* Speed control */}
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-sm text-text-secondary w-16 shrink-0">Speed</span>
+            <div className="flex gap-2">
+              {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
                 <button
-                  key={n}
-                  onClick={() => setLoopsTarget(n)}
+                  key={rate}
+                  onClick={() => handleRateChange(rate)}
                   className={`
-                    w-7 h-7 rounded text-xs font-mono transition-colors
-                    ${loopsTarget === n ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+                    px-2.5 py-1 rounded text-xs font-mono transition-colors
+                    ${playbackRate === rate
+                      ? 'bg-primary text-white'
+                      : 'bg-surface text-text-secondary hover:bg-gray-200'
+                    }
                   `}
                 >
-                  {n}
+                  {rate}×
                 </button>
               ))}
             </div>
-          </>
-        )}
-      </div>
+          </div>
 
-      {/* ── Active phrase display ── */}
-      {activePhrase && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-          <p className="text-sm text-blue-500 font-medium mb-1">Now looping</p>
-          <p className="text-gray-800 text-lg leading-relaxed">{activePhrase.text}</p>
-          <p className="text-xs text-gray-400 mt-2">
-            {activePhrase.startTime.toFixed(1)}s — {(activePhrase.startTime + activePhrase.duration).toFixed(1)}s
-            · {activePhrase.wordCount} words
-          </p>
+          {/* Drill mode */}
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-sm text-text-secondary w-16 shrink-0">Drill</span>
+            <button
+              onClick={() => setDrillMode(!drillMode)}
+              className={`
+                px-3 py-1 rounded text-xs font-medium transition-colors
+                ${drillMode ? 'bg-primary text-white' : 'bg-surface text-text-secondary hover:bg-gray-200'}
+              `}
+            >
+              {drillMode ? 'On' : 'Off'}
+            </button>
+            {drillMode && (
+              <>
+                <span className="text-xs text-text-muted">loops per phrase</span>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 5, 10].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setLoopsTarget(n)}
+                      className={`
+                        w-7 h-7 rounded text-xs font-mono transition-colors
+                        ${loopsTarget === n ? 'bg-primary text-white' : 'bg-surface text-text-secondary hover:bg-gray-200'}
+                      `}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── Storage warning ── */}
       {storageWarning && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-orange-700">
+        <div className="bg-warning-light border border-warning/30 rounded-[12px] px-4 py-3 flex items-center justify-between">
+          <p className="text-sm text-warning">
             Storage is almost full. Export your data to keep your progress.
           </p>
           <button
@@ -528,20 +542,25 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
               a.download = 'shadowing-progress.json'
               a.click()
             }}
-            className="text-xs text-orange-600 underline ml-4 shrink-0"
+            className="text-xs text-warning underline ml-4 shrink-0"
           >
             Export
           </button>
         </div>
       )}
 
-      {/* ── Active phrase panel: recorder + SRS ── */}
+      {/* ── Active phrase panel: sequential practice flow ── */}
       {activePhrase && (
-        <div className="bg-white border border-gray-100 rounded-xl p-4 space-y-3">
+        <div className="bg-bg border border-border rounded-[12px] p-4 space-y-3">
+          {/* Always visible: phrase card */}
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-gray-500 font-medium mb-1">Now looping</p>
-              <p className="text-gray-800 leading-relaxed">{activePhrase.text}</p>
+              <p className="text-sm text-primary font-medium mb-1">Now looping</p>
+              <p className="text-text leading-relaxed">{activePhrase.text}</p>
+              <p className="text-xs text-text-muted mt-2">
+                {activePhrase.startTime.toFixed(1)}s — {(activePhrase.startTime + activePhrase.duration).toFixed(1)}s
+                · {activePhrase.wordCount} words
+              </p>
             </div>
             {activePhrase.difficulty && (
               <span className={`
@@ -554,50 +573,126 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
             )}
           </div>
 
-          <PhraseRecorder
-            onRate={handleRate}
-            isQueued={queuedIds.has(activePhrase.id) || isQueued(activePhrase.id)}
-            onAddToQueue={handleAddToQueue}
-            suggestedRating={lastAzureScores
-              ? combinedToSRS(lastAzureScores, prosodyScores?.overall)
-              : undefined
-            }
-            azureComposite={lastAzureScores
-              ? combinedComposite(lastAzureScores, prosodyScores?.overall)
-              : undefined
-            }
-          />
+          {/* Step: looping / assessing — show PronunciationAssessor (button + recording only) */}
+          {(practiceStep === 'looping' || practiceStep === 'assessing') && (
+            <div className="border-t border-border pt-3">
+              <PronunciationAssessor
+                phraseText={activePhrase.text}
+                phraseId={activePhrase.id}
+                videoId={videoId}
+                hideResults
+                onAssessStart={() => {
+                  playerRef.current?.pause()
+                  setLoopState('paused')
+                  setPracticeStep('assessing')
+                }}
+                onAssessDone={() => {
+                  playerRef.current?.play()
+                  setLoopState('playing')
+                }}
+                onScoreReady={setLastAzureScores}
+                onFullResult={(result) => {
+                  setLastFullResult(result)
+                  setPracticeStep('results')
+                }}
+                onProsodyReady={(up) => {
+                  setUserProsody(up)
+                  if (nativeProfile) {
+                    setProsodyScores(compareProsody(nativeProfile, up))
+                  }
+                }}
+              />
+            </div>
+          )}
 
-          <div className="border-t border-gray-100 pt-3">
-            <PronunciationAssessor
-              phraseText={activePhrase.text}
-              phraseId={activePhrase.id}
-              videoId={videoId}
-              onAssessStart={() => {
-                playerRef.current?.pause()
-                setLoopState('paused')
-              }}
-              onAssessDone={() => {
-                playerRef.current?.play()
-                setLoopState('playing')
-              }}
-              onScoreReady={setLastAzureScores}
-              onProsodyReady={(up) => {
-                setUserProsody(up)
-                if (nativeProfile) {
-                  setProsodyScores(compareProsody(nativeProfile, up))
+          {/* Step: results — show pronunciation scores + prosody + advance to rating */}
+          {practiceStep === 'results' && lastFullResult && (
+            <div className="border-t border-border pt-3 space-y-3">
+              {/* Pronunciation score */}
+              <div className={`flex items-center justify-between px-4 py-3 rounded-[8px] border ${
+                lastFullResult.pronunciationScore >= 80 ? 'bg-success-light border-success/30 text-success' :
+                lastFullResult.pronunciationScore >= 50 ? 'bg-warning-light border-warning/30 text-warning' :
+                'bg-error-light border-error/30 text-error'
+              }`}>
+                <span className="text-sm font-medium">Pronunciation score</span>
+                <span className="text-2xl font-bold font-display">{lastFullResult.pronunciationScore}</span>
+              </div>
+
+              {/* Word accuracy */}
+              <div className="bg-surface rounded-[8px] px-4 py-3">
+                <p className="text-xs text-text-muted mb-2">Word accuracy</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {lastFullResult.words.map((w, i) => (
+                    <span
+                      key={i}
+                      title={`${w.accuracyScore}/100`}
+                      className={`text-sm font-medium px-1.5 py-0.5 rounded ${
+                        w.errorType === 'Omission' ? 'line-through text-text-muted' :
+                        w.errorType === 'Insertion' ? 'text-text-muted italic' :
+                        w.accuracyScore >= 80 ? 'text-success' :
+                        w.accuracyScore >= 50 ? 'text-warning' :
+                        'text-error'
+                      }`}
+                    >
+                      {w.word}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Accuracy / Fluency / Completeness */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  { label: 'Accuracy', value: lastFullResult.accuracyScore },
+                  { label: 'Fluency', value: lastFullResult.fluencyScore },
+                  { label: 'Complete', value: lastFullResult.completenessScore },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-surface rounded-[8px] py-2">
+                    <p className={`text-lg font-bold ${
+                      value >= 80 ? 'text-success' : value >= 50 ? 'text-warning' : 'text-error'
+                    }`}>{value}</p>
+                    <p className="text-xs text-text-muted">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Prosody feedback (if available for extracted clips) */}
+              {prosodyScores && nativeProfile && userProsody && (
+                <ProsodyFeedback
+                  scores={prosodyScores}
+                  nativeProfile={nativeProfile}
+                  userProsody={userProsody}
+                />
+              )}
+
+              {/* Advance to rating */}
+              <button
+                onClick={() => setPracticeStep('rating')}
+                className="w-full py-2.5 bg-primary text-white rounded-[8px] text-sm font-medium hover:bg-primary-dark transition-colors"
+              >
+                Rate this phrase
+              </button>
+            </div>
+          )}
+
+          {/* Step: rating — show Hard/Good/Easy */}
+          {practiceStep === 'rating' && (
+            <div className="border-t border-border pt-3">
+              <PhraseRecorder
+                onRate={(rating) => {
+                  handleRate(rating)
+                  setPracticeStep('looping')
+                }}
+                isQueued={queuedIds.has(activePhrase.id) || isQueued(activePhrase.id)}
+                onAddToQueue={handleAddToQueue}
+                suggestedRating={lastAzureScores
+                  ? combinedToSRS(lastAzureScores, prosodyScores?.overall)
+                  : undefined
                 }
-              }}
-            />
-          </div>
-
-          {/* Prosody comparison feedback (only for extracted clips) */}
-          {prosodyScores && nativeProfile && userProsody && (
-            <div className="border-t border-gray-100 pt-3">
-              <ProsodyFeedback
-                scores={prosodyScores}
-                nativeProfile={nativeProfile}
-                userProsody={userProsody}
+                azureComposite={lastAzureScores
+                  ? combinedComposite(lastAzureScores, prosodyScores?.overall)
+                  : undefined
+                }
               />
             </div>
           )}
@@ -609,8 +704,8 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
         <button
           onClick={() => { setSelectMode(!selectMode); if (selectMode) clearPhraseSelection() }}
           className={`
-            px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-            ${selectMode ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+            px-3 py-1.5 rounded-[8px] text-xs font-medium transition-colors
+            ${selectMode ? 'bg-primary text-white' : 'bg-surface text-text-secondary hover:bg-gray-200'}
           `}
         >
           {selectMode ? 'Cancel selection' : 'Select phrases to extract'}
@@ -620,7 +715,7 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
           <button
             onClick={handleExtract}
             disabled={extractionStatus === 'extracting'}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-1.5 rounded-[8px] text-xs font-medium bg-success text-white hover:bg-success disabled:opacity-50"
           >
             {extractionStatus === 'extracting'
               ? 'Extracting...'
@@ -632,26 +727,41 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
 
       {/* ── Extraction progress ── */}
       {extractionStatus === 'extracting' && extractionProgress && (
-        <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
+        <div className="bg-primary-light border border-primary/30 rounded-[12px] px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-600" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-primary" />
             </span>
-            <p className="text-sm text-purple-700">{extractionProgress}</p>
+            <p className="text-sm text-primary">{extractionProgress}</p>
           </div>
         </div>
       )}
 
       {extractionStatus === 'error' && extractionProgress && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-sm text-red-700">{extractionProgress}</p>
+        <div className="bg-error-light border border-error/30 rounded-[12px] px-4 py-3">
+          <p className="text-sm text-error">{extractionProgress}</p>
+        </div>
+      )}
+
+      {/* ── Focused mode banner ── */}
+      {focusedMode && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-primary font-medium">
+            Showing {displayPhrases.filter(p => !!extractedClips[p.id]).length} extracted clips
+          </span>
+          <button
+            onClick={() => setFocusedMode(false)}
+            className="text-xs text-text-muted hover:text-text transition-colors"
+          >
+            Show all phrases
+          </button>
         </div>
       )}
 
       {/* ── Phrase list ── */}
       <PhraseList
-        phrases={displayPhrases}
+        phrases={focusedMode ? displayPhrases.filter(p => !!extractedClips[p.id]) : displayPhrases}
         activePhraseId={activePhrase?.id ?? null}
         onPhraseClick={handlePhraseClick}
         loopState={loopState}

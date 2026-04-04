@@ -10,15 +10,15 @@
 import type { ProsodyProfile, UserProsody, ProsodyScores } from '@/types'
 
 function scoreColor(score: number): string {
-  if (score >= 80) return 'text-green-600'
-  if (score >= 50) return 'text-yellow-500'
-  return 'text-red-500'
+  if (score >= 80) return 'text-success'
+  if (score >= 50) return 'text-warning'
+  return 'text-error'
 }
 
 function scoreBg(score: number): string {
-  if (score >= 80) return 'bg-green-50'
-  if (score >= 50) return 'bg-yellow-50'
-  return 'bg-red-50'
+  if (score >= 80) return 'bg-success-light'
+  if (score >= 50) return 'bg-warning-light'
+  return 'bg-error-light'
 }
 
 interface Props {
@@ -81,19 +81,19 @@ function PitchContour({ native, user }: { native: (number | null)[]; user: (numb
   }
 
   return (
-    <div className="bg-gray-50 rounded-lg p-3">
-      <p className="text-xs text-gray-400 mb-1">Pitch contour</p>
+    <div className="bg-surface rounded-[8px] p-3">
+      <p className="text-xs text-text-muted mb-1">Pitch contour</p>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="w-full h-16"
         preserveAspectRatio="none"
       >
-        {toPath(native, '#3b82f6')}
-        {toPath(user, '#f97316')}
+        {toPath(native, '#0EA5E9')}
+        {toPath(user, '#F59E0B')}
       </svg>
       <div className="flex gap-4 mt-1">
-        <span className="text-xs text-blue-500">Native</span>
-        <span className="text-xs text-orange-500">You</span>
+        <span className="text-xs text-primary">Native</span>
+        <span className="text-xs text-secondary">You</span>
       </div>
     </div>
   )
@@ -112,8 +112,8 @@ function RhythmDots({ nativeOnsets, userOnsets, nativeDur, userDur }: {
   const normalize = (t: number, dur: number) => (t / dur) * (width - 20) + 10
 
   return (
-    <div className="bg-gray-50 rounded-lg p-3">
-      <p className="text-xs text-gray-400 mb-1">Rhythm pattern</p>
+    <div className="bg-surface rounded-[8px] p-3">
+      <p className="text-xs text-text-muted mb-1">Rhythm pattern</p>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-8">
         {/* Native onsets (top row) */}
         {nativeOnsets.map((t, i) => (
@@ -122,7 +122,7 @@ function RhythmDots({ nativeOnsets, userOnsets, nativeDur, userDur }: {
             cx={normalize(t, nativeDur)}
             cy={12}
             r={4}
-            fill="#3b82f6"
+            fill="#0EA5E9"
             opacity={0.7}
           />
         ))}
@@ -133,7 +133,7 @@ function RhythmDots({ nativeOnsets, userOnsets, nativeDur, userDur }: {
             cx={normalize(t, userDur)}
             cy={28}
             r={4}
-            fill="#f97316"
+            fill="#F59E0B"
             opacity={0.7}
           />
         ))}
@@ -141,8 +141,8 @@ function RhythmDots({ nativeOnsets, userOnsets, nativeDur, userDur }: {
         <line x1={10} y1={20} x2={width - 10} y2={20} stroke="#e5e7eb" strokeWidth={0.5} />
       </svg>
       <div className="flex gap-4 mt-1">
-        <span className="text-xs text-blue-500">Native</span>
-        <span className="text-xs text-orange-500">You</span>
+        <span className="text-xs text-primary">Native</span>
+        <span className="text-xs text-secondary">You</span>
       </div>
     </div>
   )
@@ -152,7 +152,7 @@ export default function ProsodyFeedback({ scores, nativeProfile, userProsody }: 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 px-1">
-        <span className="text-sm font-medium text-gray-700">Prosody match</span>
+        <span className="text-sm font-medium text-text-secondary">Prosody match</span>
         <span className={`text-lg font-bold ${scoreColor(scores.overall)}`}>
           {scores.overall}
         </span>
@@ -165,9 +165,9 @@ export default function ProsodyFeedback({ scores, nativeProfile, userProsody }: 
           { label: 'Rhythm', value: scores.rhythm },
           { label: 'Stress', value: scores.stress },
         ].map(({ label, value }) => (
-          <div key={label} className={`rounded-lg py-2 ${scoreBg(value)}`}>
+          <div key={label} className={`rounded-[8px] py-2 ${scoreBg(value)}`}>
             <p className={`text-lg font-bold ${scoreColor(value)}`}>{value}</p>
-            <p className="text-xs text-gray-400">{label}</p>
+            <p className="text-xs text-text-muted">{label}</p>
           </div>
         ))}
       </div>

@@ -23,9 +23,9 @@ interface Props {
 }
 
 const RATINGS = [
-  { rating: 1 as SRSRating, label: 'Hard', ghost: 'bg-red-100 text-red-700 hover:bg-red-200',          active: 'bg-red-500 text-white hover:bg-red-600' },
-  { rating: 3 as SRSRating, label: 'Good', ghost: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200', active: 'bg-yellow-500 text-white hover:bg-yellow-600' },
-  { rating: 5 as SRSRating, label: 'Easy', ghost: 'bg-green-100 text-green-700 hover:bg-green-200',    active: 'bg-green-500 text-white hover:bg-green-600' },
+  { rating: 1 as SRSRating, label: 'Hard', ghost: 'bg-error-light text-error hover:bg-error-light',          active: 'bg-error text-white hover:bg-error' },
+  { rating: 3 as SRSRating, label: 'Good', ghost: 'bg-warning-light text-warning hover:bg-warning-light', active: 'bg-warning text-white hover:bg-warning' },
+  { rating: 5 as SRSRating, label: 'Easy', ghost: 'bg-success-light text-success hover:bg-success-light',    active: 'bg-success text-white hover:bg-success' },
 ] as const
 
 const RATING_LABELS: Record<SRSRating, string> = { 1: 'Hard', 3: 'Good', 5: 'Easy' }
@@ -39,10 +39,10 @@ export default function PhraseRecorder({ onRate, isQueued, onAddToQueue, suggest
         onClick={onAddToQueue}
         disabled={isQueued}
         className={`
-          w-full py-2 rounded-lg text-sm font-medium transition-colors
+          w-full py-2 rounded-[8px] text-sm font-medium transition-colors
           ${isQueued
-            ? 'bg-green-50 text-green-600 border border-green-200 cursor-default'
-            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            ? 'bg-success-light text-success border border-success/30 cursor-default'
+            : 'bg-surface text-text-secondary hover:bg-gray-200'
           }
         `}
       >
@@ -52,13 +52,13 @@ export default function PhraseRecorder({ onRate, isQueued, onAddToQueue, suggest
       {/* ── SRS rating ── */}
       <div className="space-y-2">
         {suggestedRating !== undefined ? (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-secondary">
             Score: {azureComposite} →{' '}
             <span className="font-semibold">{RATING_LABELS[suggestedRating]}</span>
-            <span className="text-gray-300 ml-1">(tap to override)</span>
+            <span className="text-text-muted ml-1">(tap to override)</span>
           </p>
         ) : (
-          <p className="text-xs text-gray-500">How did it feel?</p>
+          <p className="text-xs text-text-secondary">How did it feel?</p>
         )}
 
         <div className="flex gap-2">
@@ -66,7 +66,7 @@ export default function PhraseRecorder({ onRate, isQueued, onAddToQueue, suggest
             <button
               key={rating}
               onClick={() => onRate(rating)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-2 rounded-[8px] text-sm font-medium transition-colors ${
                 suggestedRating === rating ? active : ghost
               }`}
             >
@@ -75,7 +75,7 @@ export default function PhraseRecorder({ onRate, isQueued, onAddToQueue, suggest
           ))}
         </div>
 
-        <p className="text-xs text-gray-300 text-center">
+        <p className="text-xs text-text-muted text-center">
           This tells the app when to show you this phrase again
         </p>
       </div>

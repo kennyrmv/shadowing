@@ -17,18 +17,20 @@ import DailyPractice from '@/components/DailyPractice'
 import { Phrase } from '@/types'
 import { useAppStore, SavedVideo } from '@/store/useAppStore'
 import { scorePhrases } from '@/lib/scorePhrases'
+import ThemeToggle from '@/components/ThemeToggle'
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
-type Tab = 'practice' | 'daily'
+type Tab = 'dashboard' | 'practice' | 'daily'
 
 export default function HomePage() {
-  const [tab, setTab] = useState<Tab>('practice')
+  const [tab, setTab] = useState<Tab>('dashboard')
   const [url, setUrl] = useState('')
   const [videoId, setVideoId] = useState<string | null>(null)
   const [phrases, setPhrases] = useState<Phrase[]>([])
   const [loadState, setLoadState] = useState<LoadState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [isPending, startTransition] = useTransition()
+  const [showUrlInput, setShowUrlInput] = useState(false)
   const videoTitleRef = useRef<string>('')
 
   const saveVideo = useAppStore((s) => s.saveVideo)
@@ -61,6 +63,7 @@ export default function HomePage() {
         setVideoId(data.videoId)
         setPhrases(data.phrases)
         setLoadState('loaded')
+        setShowUrlInput(false)
       } catch {
         setErrorMsg('Could not connect to the server. Check your internet connection.')
         setLoadState('error')
@@ -93,6 +96,7 @@ export default function HomePage() {
     setUrl(video.url)
     videoTitleRef.current = video.title
     setLoadState('loaded')
+    setShowUrlInput(false)
     setErrorMsg('')
   }
 
@@ -103,33 +107,43 @@ export default function HomePage() {
   const isLoading = loadState === 'loading' || isPending
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-surface">
       {/* ── Header ── */}
-      <header className="border-b border-gray-100 bg-white px-4 py-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-3">
+      <header className="border-b border-border bg-bg px-4 py-4">
+        <div className="max-w-[480px] mx-auto flex items-center gap-3">
           <span className="text-2xl">🎙</span>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900 leading-none">Shadowing</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Loop any phrase. Master the rhythm.</p>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold font-display text-text leading-none">Shadowing</h1>
+            <p className="text-xs text-text-muted mt-0.5">Loop any phrase. Master the rhythm.</p>
           </div>
+          {tab === 'practice' && loadState === 'loaded' && !showUrlInput && (
+            <button
+              onClick={() => setShowUrlInput(true)}
+              className="px-3 py-1.5 bg-surface border border-border text-text-secondary rounded-full text-xs font-medium hover:bg-gray-200 transition-colors"
+            >
+              Change video
+            </button>
+          )}
+          <ThemeToggle />
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-[480px] mx-auto px-4 py-6 space-y-6">
         {/* ── Tabs ── */}
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+        <div className="flex gap-1 p-1 bg-surface rounded-[12px]">
           {([
-            { id: 'practice', label: '🎧 Practice' },
-            { id: 'daily',    label: '📅 Daily' },
+            { id: 'dashboard', label: 'Dashboard' },
+            { id: 'practice',  label: 'Practice' },
+            { id: 'daily',     label: 'Daily' },
           ] as const).map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               className={`
-                flex-1 py-2 rounded-lg text-sm font-medium transition-colors
+                flex-1 py-2 rounded-[8px] text-sm font-medium transition-colors
                 ${tab === id
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-bg text-text shadow-sm'
+                  : 'text-text-secondary hover:text-text-secondary'
                 }
               `}
             >
@@ -138,13 +152,17 @@ export default function HomePage() {
           ))}
         </div>
 
+        {/* ── Dashboard tab ── */}
+        {tab === 'dashboard' && <ProgressDashboard />}
+
         {/* ── Daily Practice tab ── */}
         {tab === 'daily' && <DailyPractice />}
 
         {/* ── Practice tab ── */}
         {tab === 'practice' && <>
 
-        {/* ── URL input ── */}
+        {/* ── URL input (visible when no video loaded, or user clicks "Change video") ── */}
+        {(loadState !== 'loaded' || showUrlInput) && (
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="url"
@@ -152,9 +170,9 @@ export default function HomePage() {
             onChange={(e) => setUrl(e.target.value)}
             placeholder="Paste a YouTube URL... (e.g. https://youtube.com/watch?v=...)"
             className="
-              flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white
-              text-sm text-gray-800 placeholder:text-gray-400
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+              flex-1 px-4 py-3 rounded-[12px] border border-border bg-bg
+              text-sm text-text placeholder:text-text-muted
+              focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
               disabled:opacity-50
             "
             disabled={isLoading}
@@ -163,8 +181,8 @@ export default function HomePage() {
             type="submit"
             disabled={isLoading || !url.trim()}
             className="
-              px-5 py-3 bg-blue-600 text-white rounded-xl text-sm font-medium
-              hover:bg-blue-700 transition-colors
+              px-5 py-3 bg-primary text-white rounded-[12px] text-sm font-medium
+              hover:bg-primary-dark transition-colors
               disabled:opacity-50 disabled:cursor-not-allowed
               min-w-[80px]
             "
@@ -180,16 +198,14 @@ export default function HomePage() {
             ) : 'Load'}
           </button>
         </form>
+        )}
 
         {/* ── Error state ── */}
         {loadState === 'error' && (
-          <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-            <p className="text-sm text-red-600">{errorMsg}</p>
+          <div className="bg-error-light border border-error/20 rounded-[12px] px-4 py-3">
+            <p className="text-sm text-error">{errorMsg}</p>
           </div>
         )}
-
-        {/* ── Progress (always visible — the landing and the scoreboard) ── */}
-        <ProgressDashboard />
 
         {/* ── Video Library ── */}
         {loadState !== 'loaded' && (
@@ -198,15 +214,15 @@ export default function HomePage() {
 
         {/* ── Idle / hint ── */}
         {loadState === 'idle' && savedVideos.length === 0 && (
-          <div className="text-center py-8 text-gray-400 space-y-2">
+          <div className="text-center py-8 text-text-muted space-y-2">
             <p className="text-4xl">🎧</p>
             <p className="text-sm font-medium">Paste a YouTube link to get started</p>
             <p className="text-xs">
               Works with TED Talks, podcasts, interviews — any video with subtitles
             </p>
-            <div className="mt-4 text-xs text-gray-300 space-y-1">
+            <div className="mt-4 text-xs text-text-muted space-y-1">
               <p>Try: <span className="font-mono">https://youtube.com/watch?v=iG9CE55wbtY</span></p>
-              <p className="text-gray-400 text-xs">(TED Talk: &quot;Do schools kill creativity?&quot;)</p>
+              <p className="text-text-muted text-xs">(TED Talk: &quot;Do schools kill creativity?&quot;)</p>
             </div>
           </div>
         )}
@@ -222,15 +238,15 @@ export default function HomePage() {
                 className={`
                   px-4 py-2 rounded-lg text-sm font-medium transition-colors
                   ${isVideoSaved
-                    ? 'bg-green-50 text-green-600 border border-green-200 cursor-default'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-success-light text-success border border-success/30 cursor-default'
+                    : 'bg-surface text-text-secondary hover:bg-gray-200'
                   }
                 `}
               >
                 {isVideoSaved ? '✓ Saved to library' : '+ Save to library'}
               </button>
               {videoTitleRef.current && (
-                <span className="text-sm text-gray-500 truncate">{videoTitleRef.current}</span>
+                <span className="text-sm text-text-secondary truncate">{videoTitleRef.current}</span>
               )}
             </div>
 
@@ -244,8 +260,8 @@ export default function HomePage() {
 
         {/* ── Loaded but no phrases ── */}
         {loadState === 'loaded' && phrases.length === 0 && (
-          <div className="bg-yellow-50 border border-yellow-100 rounded-xl px-4 py-3">
-            <p className="text-sm text-yellow-700">
+          <div className="bg-warning-light border border-warning/20 rounded-[12px] px-4 py-3">
+            <p className="text-sm text-warning">
               Transcript loaded but no phrases were detected. The video may have very short or unusual captions.
             </p>
           </div>
