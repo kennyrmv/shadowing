@@ -23,16 +23,19 @@ export async function register() {
     const cron = await import('node-cron')
 
     if (!cron.default.validate(schedule)) {
-      console.error(`[instrumentation] Invalid cron schedule: "${schedule}". Using default "0 9 * * *"`)
+      console.error(`[instrumentation] Invalid cron schedule: "${schedule}". Skipping scheduler.`)
+      return
     }
 
     cron.default.schedule(schedule, async () => {
       console.log('[push/cron] Firing daily notification...')
       try {
-        // Call our own send endpoint internally
-        const baseUrl = process.env.NEXTAUTH_URL ?? process.env.RAILWAY_PUBLIC_DOMAIN
-          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-          : 'http://localhost:3000'
+        // Call our own send endpoint internally.
+        // Operator precedence note: parentheses are required — ?? has higher precedence than ternary.
+        const baseUrl = process.env.NEXTAUTH_URL
+          ?? (process.env.RAILWAY_PUBLIC_DOMAIN
+            ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+            : 'http://localhost:3000')
 
         const res = await fetch(`${baseUrl}/api/push/send`, {
           method: 'POST',
