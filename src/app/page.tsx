@@ -18,6 +18,7 @@ import { Phrase } from '@/types'
 import { useAppStore, SavedVideo } from '@/store/useAppStore'
 import { scorePhrases } from '@/lib/scorePhrases'
 import ThemeToggle from '@/components/ThemeToggle'
+import PushNotificationToggle from '@/components/PushNotificationToggle'
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 type Tab = 'dashboard' | 'practice' | 'daily'
@@ -136,6 +137,7 @@ export default function HomePage() {
               Change video
             </button>
           )}
+          <PushNotificationToggle />
           <ThemeToggle />
         </div>
       </header>
