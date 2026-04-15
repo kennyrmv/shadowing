@@ -4,7 +4,7 @@
 // Returns: { status: 'processing' | 'done' | 'error', progress?, clips?, error? }
 
 import { NextRequest, NextResponse } from 'next/server'
-import { jobs } from '../route'
+import { jobs } from '../jobs'
 
 export async function GET(req: NextRequest) {
   const jobId = req.nextUrl.searchParams.get('jobId')

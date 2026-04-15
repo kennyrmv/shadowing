@@ -13,6 +13,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import os from 'os'
 import { uploadToR2, getPresignedUrl, r2Keys } from '@/lib/r2'
+import { jobs } from './jobs'
 
 const execFileAsync = promisify(execFile)
 
@@ -22,24 +23,6 @@ interface PhraseInput {
   duration: number
   text: string
 }
-
-interface JobState {
-  status: 'processing' | 'done' | 'error'
-  progress: string
-  clips?: Array<{
-    phraseId: string
-    videoId: string
-    clipUrl: string
-    audioUrl: string
-    prosodyUrl: string
-    extractedAt: string
-    expiresAt: string
-  }>
-  error?: string
-}
-
-// In-memory job store (Railway = single instance)
-const jobs = new Map<string, JobState>()
 
 // Find Python executable (same pattern as fetchTranscript.ts)
 const PYTHON_CANDIDATES = [
@@ -179,5 +162,3 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Export jobs map for status route
-export { jobs }
