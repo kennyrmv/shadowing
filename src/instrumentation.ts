@@ -11,7 +11,16 @@ export async function register() {
   // Only run on the Node.js server runtime, not in the Edge runtime or client
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
 
-  // Skip in development to avoid push spam during hot reload
+  // Ensure the push_subscriptions table exists (idempotent)
+  try {
+    const { initDb } = await import('@/lib/db')
+    await initDb()
+    console.log('[instrumentation] DB table ready')
+  } catch (err) {
+    console.error('[instrumentation] Failed to init DB:', err)
+  }
+
+  // Skip cron in development to avoid push spam during hot reload
   if (process.env.NODE_ENV === 'development') {
     console.log('[instrumentation] Push cron skipped in development')
     return

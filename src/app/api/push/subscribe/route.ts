@@ -1,16 +1,13 @@
 // ─── POST /api/push/subscribe ─────────────────────────────────────────────────
 //
-// Saves a Web Push subscription to data/push-subscriptions.json.
+// Saves a Web Push subscription to the push_subscriptions Postgres table.
 // Called by the client when the user enables push notifications.
 //
 // Body: PushSubscription (endpoint + keys.auth + keys.p256dh)
 // Response: { ok: true }
 
 import { NextRequest, NextResponse } from 'next/server'
-import fs from 'fs/promises'
-import path from 'path'
-
-const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'data', 'push-subscriptions.json')
+import { query } from '@/lib/db'
 
 interface PushSubscriptionJSON {
   endpoint: string
@@ -18,21 +15,6 @@ interface PushSubscriptionJSON {
     auth: string
     p256dh: string
   }
-  expirationTime?: number | null
-}
-
-async function readSubscriptions(): Promise<PushSubscriptionJSON[]> {
-  try {
-    const raw = await fs.readFile(SUBSCRIPTIONS_FILE, 'utf-8')
-    return JSON.parse(raw)
-  } catch {
-    return []
-  }
-}
-
-async function writeSubscriptions(subs: PushSubscriptionJSON[]): Promise<void> {
-  await fs.mkdir(path.dirname(SUBSCRIPTIONS_FILE), { recursive: true })
-  await fs.writeFile(SUBSCRIPTIONS_FILE, JSON.stringify(subs, null, 2), 'utf-8')
 }
 
 export async function POST(req: NextRequest) {
@@ -51,11 +33,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const existing = await readSubscriptions()
-    // Dedup by endpoint — replace if already registered
-    const filtered = existing.filter((s) => s.endpoint !== body.endpoint)
-    await writeSubscriptions([...filtered, body])
-    console.log(`[push/subscribe] Registered subscription. Total: ${filtered.length + 1}`)
+    // Upsert — replace if endpoint already registered
+    await query(
+      `INSERT INTO push_subscriptions (endpoint, auth, p256dh)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (endpoint) DO UPDATE
+         SET auth = EXCLUDED.auth, p256dh = EXCLUDED.p256dh, created_at = NOW()`,
+      [body.endpoint, body.keys.auth, body.keys.p256dh]
+    )
+
+    const { rows } = await query('SELECT COUNT(*) FROM push_subscriptions')
+    console.log(`[push/subscribe] Registered. Total: ${rows[0].count}`)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[push/subscribe] Failed to save subscription:', err)
@@ -76,9 +64,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const existing = await readSubscriptions()
-    const filtered = existing.filter((s) => s.endpoint !== body.endpoint)
-    await writeSubscriptions(filtered)
+    await query('DELETE FROM push_subscriptions WHERE endpoint = $1', [body.endpoint])
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[push/subscribe] Failed to remove subscription:', err)
