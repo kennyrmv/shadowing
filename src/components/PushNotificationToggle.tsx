@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react'
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ''
 
-type Status = 'unsupported' | 'denied' | 'idle' | 'subscribed' | 'loading'
+type Status = 'unsupported' | 'denied' | 'idle' | 'subscribed' | 'loading' | 'error'
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -23,6 +23,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 export default function PushNotificationToggle() {
   const [status, setStatus] = useState<Status>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -91,15 +92,17 @@ export default function PushNotificationToggle() {
 
       setStatus('subscribed')
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
       console.error('[push] Subscribe failed:', err)
-      setStatus('idle')
+      setErrorMsg(msg)
+      setStatus('error')
     }
   }
 
   if (status === 'unsupported') return null
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col items-end gap-1">
       <button
         onClick={handleToggle}
         disabled={status === 'loading' || status === 'denied'}
@@ -107,7 +110,7 @@ export default function PushNotificationToggle() {
           flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
           ${status === 'subscribed'
             ? 'bg-primary text-white'
-            : status === 'denied'
+            : status === 'denied' || status === 'error'
               ? 'bg-surface text-text-muted cursor-not-allowed'
               : 'bg-surface text-text-secondary hover:bg-gray-200'
           }
@@ -119,9 +122,13 @@ export default function PushNotificationToggle() {
           {status === 'subscribed' ? 'Notificaciones activas' :
            status === 'denied' ? 'Bloqueadas' :
            status === 'loading' ? '...' :
+           status === 'error' ? 'Error' :
            'Activar recordatorio'}
         </span>
       </button>
+      {status === 'error' && errorMsg && (
+        <span className="text-[10px] text-error max-w-[200px] text-right leading-tight">{errorMsg}</span>
+      )}
     </div>
   )
 }
