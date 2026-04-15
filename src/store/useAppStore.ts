@@ -52,6 +52,7 @@ interface AppState {
   activePhrase: Phrase | null
   loopState: LoopState
   playbackRate: number
+  timingOffset: number  // seconds added to phrase.startTime before seeking (fixes caption timing drift)
   drillMode: boolean
   loopsTarget: number
   loopCount: number
@@ -75,6 +76,7 @@ interface AppState {
   setActivePhrase: (phrase: Phrase | null) => void
   setLoopState: (state: LoopState) => void
   setPlaybackRate: (rate: number) => void
+  setTimingOffset: (offsetSec: number) => void
   setDrillMode: (on: boolean) => void
   setLoopsTarget: (n: number) => void
   setLoopCount: (n: number) => void
@@ -108,6 +110,7 @@ export const useAppStore = create<AppState>()(
       activePhrase: null,
       loopState: 'idle' as LoopState,
       playbackRate: 1,
+      timingOffset: 0,
       drillMode: false,
       loopsTarget: 3,
       loopCount: 0,
@@ -127,6 +130,7 @@ export const useAppStore = create<AppState>()(
       setActivePhrase: (phrase) => set({ activePhrase: phrase, loopCount: 0 }),
       setLoopState: (state) => set({ loopState: state }),
       setPlaybackRate: (rate) => set({ playbackRate: rate }),
+      setTimingOffset: (offsetSec) => set({ timingOffset: Math.max(-3, Math.min(3, offsetSec)) }),
       setDrillMode: (on) => set({ drillMode: on }),
       setLoopsTarget: (n) => set({ loopsTarget: n }),
       setLoopCount: (n) => set({ loopCount: n }),
