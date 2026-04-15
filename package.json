@@ -12,6 +12,7 @@
     "@aws-sdk/client-s3": "^3.1024.0",
     "@aws-sdk/s3-request-presigner": "^3.1024.0",
     "@danielxceron/youtube-transcript": "^1.2.6",
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@tanstack/react-virtual": "^3.13.23",
     "microsoft-cognitiveservices-speech-sdk": "^1.49.0",
     "next": "16.2.2",
