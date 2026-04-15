@@ -10,8 +10,6 @@
 
 import { useState, useEffect } from 'react'
 
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ''
-
 type Status = 'unsupported' | 'denied' | 'idle' | 'subscribed' | 'loading' | 'error'
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -73,10 +71,16 @@ export default function PushNotificationToggle() {
         return
       }
 
+      // Fetch VAPID public key from server at runtime (avoids build-time env var issues)
+      const configRes = await fetch('/api/push/config')
+      if (!configRes.ok) throw new Error('Failed to fetch VAPID config')
+      const { vapidPublicKey } = await configRes.json()
+      if (!vapidPublicKey) throw new Error('VAPID public key not configured on server')
+
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as unknown as ArrayBuffer,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as ArrayBuffer,
       })
 
       const subJSON = sub.toJSON() as {
