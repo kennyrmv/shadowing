@@ -69,6 +69,8 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
   const setLoopState = useAppStore((s) => s.setLoopState)
   const playbackRate = useAppStore((s) => s.playbackRate)
   const storeSetPlaybackRate = useAppStore((s) => s.setPlaybackRate)
+  const timingOffset = useAppStore((s) => s.timingOffset)
+  const setTimingOffset = useAppStore((s) => s.setTimingOffset)
   const drillMode = useAppStore((s) => s.drillMode)
   const setDrillMode = useAppStore((s) => s.setDrillMode)
   const loopsTarget = useAppStore((s) => s.loopsTarget)
@@ -195,10 +197,11 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
       if (!phrase || state !== 'playing') return
 
       const current = playerRef.current?.getCurrentTime() ?? 0
-      // For extracted clips, the clip starts at 0; for YouTube, use phrase.startTime
+      // For extracted clips, the clip starts at 0; for YouTube, use phrase.startTime + timingOffset
       const clips = useAppStore.getState().extractedClips
       const hasClip = !!clips[phrase.id]
-      const startTime = hasClip ? 0 : phrase.startTime
+      const offset = hasClip ? 0 : useAppStore.getState().timingOffset
+      const startTime = hasClip ? 0 : phrase.startTime + offset
       const endTime = startTime + phrase.duration
 
       // Reset the end-fired guard once the player has actually seeked back
@@ -223,7 +226,8 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
             setActivePhrase(next)
             setIsRestarting(false)
             const nextHasClip = !!clips[next.id]
-            playerRef.current?.seekTo(nextHasClip ? 0 : next.startTime)
+            const nextOffset = nextHasClip ? 0 : useAppStore.getState().timingOffset
+            playerRef.current?.seekTo(nextHasClip ? 0 : next.startTime + nextOffset)
           } else {
             // End of phrase list — stop
             setLoopState('paused')
@@ -299,10 +303,10 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
     setActivePhrase(phrase)
     setLoopState('playing')
     setIsRestarting(false)
-    // For clips, seek to 0 (clip IS the phrase); for YouTube, seek to phrase.startTime
+    // For clips, seek to 0 (clip IS the phrase); for YouTube, seek to phrase.startTime + timingOffset
     const hasClip = !!extractedClips[phrase.id]
-    playerRef.current?.seekTo(hasClip ? 0 : phrase.startTime)
-  }, [activePhrase, loopState, playerReady, extractedClips])
+    playerRef.current?.seekTo(hasClip ? 0 : phrase.startTime + timingOffset)
+  }, [activePhrase, loopState, playerReady, extractedClips, timingOffset, setActivePhrase, setLoopState])
 
   // ─── Speed control ────────────────────────────────────────────────────────────
   const handleRateChange = useCallback((rate: number) => {
@@ -491,6 +495,33 @@ export default function PhrasePlayer({ videoId, phrases, onTitleReady }: Props) 
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Timing offset — fix caption drift (caption-level timestamps only, no word-level available) */}
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-sm text-text-secondary w-16 shrink-0">Timing</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTimingOffset(Math.round((timingOffset - 0.1) * 10) / 10)}
+                className="w-6 h-6 rounded bg-surface text-text-secondary hover:bg-gray-200 text-sm font-mono leading-none"
+                title="Start phrase 0.1s earlier"
+              >−</button>
+              <span className="text-xs font-mono text-text w-14 text-center">
+                {timingOffset === 0 ? '0.0 s' : `${timingOffset > 0 ? '+' : ''}${timingOffset.toFixed(1)} s`}
+              </span>
+              <button
+                onClick={() => setTimingOffset(Math.round((timingOffset + 0.1) * 10) / 10)}
+                className="w-6 h-6 rounded bg-surface text-text-secondary hover:bg-gray-200 text-sm font-mono leading-none"
+                title="Start phrase 0.1s later"
+              >+</button>
+              {timingOffset !== 0 && (
+                <button
+                  onClick={() => setTimingOffset(0)}
+                  className="text-xs text-text-muted hover:text-text-secondary ml-1"
+                >reset</button>
+              )}
+            </div>
+            <span className="text-xs text-text-muted">offset</span>
           </div>
 
           {/* Drill mode */}

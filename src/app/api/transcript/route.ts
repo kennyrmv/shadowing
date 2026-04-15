@@ -32,6 +32,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const rawTranscript = await fetchTranscript(videoId)
+
+    // ─── SPIKE: timestamp granularity inspection ──────────────────────────────
+    // Findings: youtube-transcript-api returns caption-level timestamps only
+    // (snippet.start in seconds → ms). No word-level timing available.
+    // Fix: configurable timingOffset in the player (see useAppStore + PhrasePlayer).
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[transcript] raw caption sample (first 3):',
+        rawTranscript.slice(0, 3).map(c => ({
+          text: c.text.slice(0, 40),
+          offset_ms: c.offset,
+          duration_ms: c.duration,
+        }))
+      )
+      console.log(`[transcript] total captions: ${rawTranscript.length}, granularity: caption-level only`)
+    }
+
     const phrases = segmentPhrases(rawTranscript, videoId)
     return NextResponse.json({ videoId, phrases })
   } catch (err: unknown) {

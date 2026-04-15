@@ -21,6 +21,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Shadowing",
   description: "Loop any phrase. Master the rhythm.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Shadowing",
+  },
+  icons: {
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export default function RootLayout({

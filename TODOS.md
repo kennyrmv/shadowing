@@ -16,18 +16,6 @@
 
 ## P2 — Do after validation
 
-### Zustand state management migration
-**What:** Migrate from plain React `useState` to Zustand for global state management.
-**Why:** The player, loop, recorder, and SRS all interact simultaneously. When you stop recording and rate a phrase, that updates SRS, which re-orders the drill queue. Plain React state will get tangled with 4+ interacting features.
-**When:** When you start building the connection between recorder → SRS rating → drill queue reorder and it feels messy.
-**How to start:** `npm install zustand` → create `store/useAppStore.ts` → migrate player + loop + SRS state into one store.
-**Pros:** Clean state, easier debugging, no prop-drilling, DevTools support.
-**Cons:** Small learning curve, ~30 min refactor with CC.
-**Effort:** M (human: ~2 days / CC: ~30 min)
-**Depends on:** Core player + loop + SRS working first.
-
----
-
 ## P3 — Nice to have
 
 ### Native waveform comparison (Whisper-based)
