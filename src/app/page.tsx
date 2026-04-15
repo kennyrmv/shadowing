@@ -9,7 +9,7 @@
 //   4. User clicks any phrase → it loops
 //   5. User can save video to library for future sessions
 
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
 import PhrasePlayer from '@/components/PhrasePlayer'
 import ProgressDashboard from '@/components/ProgressDashboard'
 import VideoLibrary from '@/components/VideoLibrary'
@@ -35,6 +35,18 @@ export default function HomePage() {
 
   const saveVideo = useAppStore((s) => s.saveVideo)
   const savedVideos = useAppStore((s) => s.savedVideos)
+  const hasHydrated = useAppStore((s) => s._hasHydrated)
+
+  // After Zustand loads from localStorage, switch to Daily tab if the user has videos.
+  // Using useEffect (not useState initializer) avoids SSR mismatch while still
+  // preventing the flash — _hasHydrated fires synchronously after the first render.
+  useEffect(() => {
+    if (hasHydrated && savedVideos.length > 0 && tab === 'dashboard') {
+      setTab('daily')
+    }
+    // Only run once on hydration, not on subsequent savedVideos changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated])
 
   // Check if current video is already saved
   const isVideoSaved = videoId ? savedVideos.some((v) => v.videoId === videoId) : false

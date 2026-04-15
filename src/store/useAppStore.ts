@@ -48,6 +48,9 @@ export interface AzureScores {
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
 interface AppState {
+  // Hydration flag — true after Zustand persist has loaded from localStorage
+  _hasHydrated: boolean
+
   // Player state (migrated from PhrasePlayer)
   activePhrase: Phrase | null
   loopState: LoopState
@@ -75,6 +78,7 @@ interface AppState {
   // Player actions
   setActivePhrase: (phrase: Phrase | null) => void
   setLoopState: (state: LoopState) => void
+  setHasHydrated: (v: boolean) => void
   setPlaybackRate: (rate: number) => void
   setTimingOffset: (offsetSec: number) => void
   setDrillMode: (on: boolean) => void
@@ -107,6 +111,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       // ── Player state defaults ──
+      _hasHydrated: false,
       activePhrase: null,
       loopState: 'idle' as LoopState,
       playbackRate: 1,
@@ -129,6 +134,7 @@ export const useAppStore = create<AppState>()(
       // ── Player actions ──
       setActivePhrase: (phrase) => set({ activePhrase: phrase, loopCount: 0 }),
       setLoopState: (state) => set({ loopState: state }),
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
       setPlaybackRate: (rate) => set({ playbackRate: rate }),
       setTimingOffset: (offsetSec) => set({ timingOffset: Math.max(-3, Math.min(3, offsetSec)) }),
       setDrillMode: (on) => set({ drillMode: on }),
@@ -198,12 +204,19 @@ export const useAppStore = create<AppState>()(
       // Only persist user preferences + library + scores. Ephemeral state resets on reload.
       partialize: (state) => ({
         playbackRate: state.playbackRate,
+        timingOffset: state.timingOffset,
         drillMode: state.drillMode,
         loopsTarget: state.loopsTarget,
         savedVideos: state.savedVideos,
         scoreHistory: state.scoreHistory,
         extractedClips: state.extractedClips,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Signal that the store has loaded from localStorage.
+        // Consumers can read useAppStore.getState()._hasHydrated to avoid
+        // showing incorrect default UI before the persisted data is available.
+        state?.setHasHydrated(true)
+      },
       storage: {
         getItem: (name) => {
           try {
