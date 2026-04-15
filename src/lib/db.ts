@@ -16,24 +16,30 @@ declare global {
   var _pgPool: Pool | undefined
 }
 
-function createPool(): Pool {
+// Lazy — pool is created on first query, not at import time.
+// This prevents build-time failures when DATABASE_URL is not available.
+function getPool(): Pool {
+  if (globalThis._pgPool) return globalThis._pgPool
+
   if (!process.env.DATABASE_URL) {
     throw new Error('[db] DATABASE_URL is not set. Add a Postgres service on Railway.')
   }
-  return new Pool({
+
+  const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
   })
+
+  // Cache the pool to avoid creating multiple instances during hot reload
+  globalThis._pgPool = pool
+  return pool
 }
 
-const pool = globalThis._pgPool ?? createPool()
-if (process.env.NODE_ENV !== 'production') globalThis._pgPool = pool
-
 export function query(text: string, params?: unknown[]) {
-  return pool.query(text, params)
+  return getPool().query(text, params)
 }
 
 // ─── Table init ───────────────────────────────────────────────────────────────

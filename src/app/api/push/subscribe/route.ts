@@ -9,6 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 
+// Never statically render — this route requires runtime DB access
+export const dynamic = 'force-dynamic'
+
 interface PushSubscriptionJSON {
   endpoint: string
   keys: {
