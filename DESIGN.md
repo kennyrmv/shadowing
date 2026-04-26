@@ -71,10 +71,13 @@
   - full: 9999px (pills, badges, loop badge, "change video" button)
 
 ## Navigation
-- **3 tabs:** Dashboard / Practice / Daily
+- **2 tabs:** Today / Library
   - Tab bar: pill-style container (bg: surface, radius: lg), active tab gets white bg + shadow
   - Tab text: 13px DM Sans 500, muted when inactive, dark when active
-- **URL bar:** Hidden by default. Replaced by a small "Change video" pill button in the header (right-aligned). Clicking it reveals the URL input as an expandable overlay or inline field.
+  - Today = default landing (Daily Practice session). Library = content management + free-form practice
+  - Dashboard is not a tab — accessible via streak/level badge in the header (Today only)
+- **Streak/level badge:** Shown in header when on Today or Dashboard. Pill-style (border, surface bg). Displays 🔥 streak count (when > 0) + current difficulty level. Tapping it toggles the Dashboard view.
+- **URL bar:** Hidden by default. Replaced by a small "Change video" pill button in the header (Library tab only). Clicking it reveals the URL input as an expandable overlay or inline field.
 
 ## UX Patterns
 
@@ -135,6 +138,7 @@
 | 2026-04-04 | Sky blue (#0EA5E9) as primary instead of green | Differentiates from Duolingo, signals "audio/voice/sound" |
 | 2026-04-04 | Nunito + DM Sans typography stack | Rounded warmth (Nunito) for display + geometric clarity (DM Sans) for body. Free alternatives to Duolingo's proprietary fonts |
 | 2026-04-04 | 3-tab navigation (Dashboard/Practice/Daily) | Separates concerns, reduces visual chaos. Dashboard stats were cluttering the practice flow |
+| 2026-04-26 | 2-tab navigation (Today/Library) — Dashboard via badge | Coach mode reframe: app opens to Today's session with zero decisions. Library = content management. Dashboard accessible from streak/level badge in Today header only. Removes the "which tab do I start on?" decision fatigue |
 | 2026-04-04 | Hidden URL bar with "Change video" button | URL bar is a one-time action, shouldn't occupy permanent screen space |
 | 2026-04-04 | Collapsible video settings | Start-from, speed, drill are power-user controls — hide by default |
 | 2026-04-04 | Sequential post-assessment flow | Pronunciation scores, then prosody match, then rating. Not stacked/parallel. Cleaner and gives each feedback type its own moment |
