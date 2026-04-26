@@ -1,15 +1,6 @@
 'use client'
 
-// ─── Homepage ──────────────────────────────────────────────────────────────────
-//
-// The full user flow:
-//   1. User pastes a YouTube URL OR picks from library
-//   2. App fetches transcript (or loads from library)
-//   3. PhrasePlayer renders the video + phrase list
-//   4. User clicks any phrase → it loops
-//   5. User can save video to library for future sessions
-
-import { useState, useTransition, useRef, useEffect } from 'react'
+import { useState, useTransition, useRef, useEffect, useMemo } from 'react'
 import PhrasePlayer from '@/components/PhrasePlayer'
 import ProgressDashboard from '@/components/ProgressDashboard'
 import VideoLibrary from '@/components/VideoLibrary'
@@ -17,14 +8,17 @@ import DailyPractice from '@/components/DailyPractice'
 import { Phrase } from '@/types'
 import { useAppStore, SavedVideo } from '@/store/useAppStore'
 import { scorePhrases } from '@/lib/scorePhrases'
+import { getProgress } from '@/lib/progress'
+import { getLevelReport } from '@/lib/adaptiveDifficulty'
 import ThemeToggle from '@/components/ThemeToggle'
 import PushNotificationToggle from '@/components/PushNotificationToggle'
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
-type Tab = 'dashboard' | 'practice' | 'daily'
+// 'dashboard' is not a tab-bar entry — reachable only via the streak/level badge on Today
+type Tab = 'today' | 'library' | 'dashboard'
 
 export default function HomePage() {
-  const [tab, setTab] = useState<Tab>('dashboard')
+  const [tab, setTab] = useState<Tab>('today')
   const [url, setUrl] = useState('')
   const [videoId, setVideoId] = useState<string | null>(null)
   const [phrases, setPhrases] = useState<Phrase[]>([])
@@ -32,22 +26,32 @@ export default function HomePage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [isPending, startTransition] = useTransition()
   const [showUrlInput, setShowUrlInput] = useState(false)
+  const [streak, setStreak] = useState(0)
   const videoTitleRef = useRef<string>('')
 
   const saveVideo = useAppStore((s) => s.saveVideo)
   const savedVideos = useAppStore((s) => s.savedVideos)
+  const scoreHistory = useAppStore((s) => s.scoreHistory)
   const hasHydrated = useAppStore((s) => s._hasHydrated)
 
-  // After Zustand loads from localStorage, switch to Daily tab if the user has videos.
-  // Using useEffect (not useState initializer) avoids SSR mismatch while still
-  // preventing the flash — _hasHydrated fires synchronously after the first render.
+  // Route on hydration: empty library → Library tab, has videos → Today tab.
+  // savedVideos intentionally excluded from deps — only run once on hydration,
+  // not on every library change.
   useEffect(() => {
-    if (hasHydrated && savedVideos.length > 0 && tab === 'dashboard') {
-      setTab('daily')
+    if (hasHydrated) {
+      setTab(savedVideos.length === 0 ? 'library' : 'today')
+      setStreak(getProgress().streak)
     }
-    // Only run once on hydration, not on subsequent savedVideos changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated])
+
+  const levelReport = useMemo(
+    () => getLevelReport(scoreHistory, savedVideos),
+    [scoreHistory, savedVideos],
+  )
+
+  // When dashboard is open (via badge), Today tab still appears active in the nav bar
+  const activeTab = tab === 'dashboard' ? 'today' : tab
 
   // Check if current video is already saved
   const isVideoSaved = videoId ? savedVideos.some((v) => v.videoId === videoId) : false
@@ -129,12 +133,23 @@ export default function HomePage() {
             <h1 className="text-lg font-bold font-display text-text leading-none">Shadowing</h1>
             <p className="text-xs text-text-muted mt-0.5">Loop any phrase. Master the rhythm.</p>
           </div>
-          {tab === 'practice' && loadState === 'loaded' && !showUrlInput && (
+          {tab === 'library' && loadState === 'loaded' && !showUrlInput && (
             <button
               onClick={() => setShowUrlInput(true)}
               className="px-3 py-1.5 bg-surface border border-border text-text-secondary rounded-full text-xs font-medium hover:bg-gray-200 transition-colors"
             >
               Change video
+            </button>
+          )}
+          {/* Streak/level badge — opens dashboard. Only shown after hydration to avoid "easy" flash. */}
+          {hasHydrated && (tab === 'today' || tab === 'dashboard') && (
+            <button
+              onClick={() => setTab(tab === 'dashboard' ? 'today' : 'dashboard')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-full text-xs font-medium text-text-secondary hover:bg-gray-200 transition-colors"
+              title={tab === 'dashboard' ? 'Back to Today' : 'View your progress'}
+            >
+              {streak > 0 && <span>🔥 {streak}</span>}
+              <span className="capitalize">{levelReport.currentLevel}</span>
             </button>
           )}
           <PushNotificationToggle />
@@ -146,16 +161,15 @@ export default function HomePage() {
         {/* ── Tabs ── */}
         <div className="flex gap-1 p-1 bg-surface rounded-[12px]">
           {([
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'practice',  label: 'Practice' },
-            { id: 'daily',     label: 'Daily' },
+            { id: 'today',   label: 'Today' },
+            { id: 'library', label: 'Library' },
           ] as const).map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               className={`
                 flex-1 py-2 rounded-[8px] text-sm font-medium transition-colors
-                ${tab === id
+                ${activeTab === id
                   ? 'bg-bg text-text shadow-sm'
                   : 'text-text-secondary hover:text-text-secondary'
                 }
@@ -166,14 +180,14 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* ── Dashboard tab ── */}
+        {/* ── Dashboard (accessible via badge, not tab bar) ── */}
         {tab === 'dashboard' && <ProgressDashboard />}
 
-        {/* ── Daily Practice tab ── */}
-        {tab === 'daily' && <DailyPractice />}
+        {/* ── Today tab ── */}
+        {tab === 'today' && <DailyPractice />}
 
-        {/* ── Practice tab ── */}
-        {tab === 'practice' && <>
+        {/* ── Library tab ── */}
+        {tab === 'library' && <>
 
         {/* ── URL input (visible when no video loaded, or user clicks "Change video") ── */}
         {(loadState !== 'loaded' || showUrlInput) && (
@@ -281,7 +295,7 @@ export default function HomePage() {
           </div>
         )}
 
-        </> /* end practice tab */}
+        </> /* end library tab */}
       </div>
     </main>
   )
