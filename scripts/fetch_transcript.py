@@ -14,8 +14,8 @@ def make_api(use_proxy=True):
     from youtube_transcript_api import YouTubeTranscriptApi
 
     # Server: use Webshare proxy — try argv first (passed by Node.js), then env var
-    proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('NEXT_PUBLIC_WEBSHARE_PROXY_USER')
-    proxy_pass = (sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None) or os.environ.get('NEXT_PUBLIC_WEBSHARE_PROXY_PASS')
+    proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('WEBSHARE_PROXY_USER')
+    proxy_pass = (sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None) or os.environ.get('WEBSHARE_PROXY_PASS')
     if use_proxy and proxy_user and proxy_pass:
         try:
             from youtube_transcript_api.proxies import WebshareProxyConfig
@@ -93,7 +93,7 @@ def main():
         except (TranscriptsDisabled, VideoUnavailable, NoTranscriptFound):
             raise  # don't retry these — they won't change without a proxy
         except Exception as proxy_err:
-            proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('NEXT_PUBLIC_WEBSHARE_PROXY_USER')
+            proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('WEBSHARE_PROXY_USER')
             print(f"[DEBUG] proxy attempt failed (proxy_user={'SET' if proxy_user else 'NOT_SET'}): {proxy_err}", file=sys.stderr)
             print(f"[DEBUG] retrying without proxy...", file=sys.stderr)
             result = fetch_with_api(use_proxy=False)
@@ -110,7 +110,7 @@ def main():
         print(json.dumps({"error": "NO_CAPTIONS"}))
         sys.exit(1)
     except Exception as e:
-        proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('NEXT_PUBLIC_WEBSHARE_PROXY_USER')
+        proxy_user = (sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None) or os.environ.get('WEBSHARE_PROXY_USER')
         print(json.dumps({"error": f"[proxy={'SET' if proxy_user else 'NOT_SET'}] {str(e)}"}))
         sys.exit(1)
 
